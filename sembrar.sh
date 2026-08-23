@@ -91,6 +91,31 @@ if command -v npm >/dev/null 2>&1; then
 else
   echo "→ npm no disponible; sin índice codegraph (búsquedas del agente sin grafo)"
 fi
+# 0d) Tailscale: red privada de la colmena (instalar + unirse con token)
+# Necesita sudo/root y un TAILSCALE_TOKEN en .env (auth key). No fatal si falta.
+TS_TOKEN="$(grep -E '^TAILSCALE_TOKEN=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d '"' || true)"
+if command -v tailscale >/dev/null 2>&1; then
+  echo "→ tailscale ya instalado"
+else
+  echo "→ tailscale: instalando (requiere sudo)"
+  if command -v curl >/dev/null 2>&1 && { [ "$(id -u 2>/dev/null)" = "0" ] || command -v sudo >/dev/null 2>&1; }; then
+    curl -fsSL https://tailscale.com/install.sh | sh 2>/dev/null \
+      && echo "✅ tailscale instalado" \
+      || echo "⚠️  no se pudo instalar tailscale (revisa red/sudo)"
+  else
+    echo "⚠️  no se pudo instalar tailscale (sin curl o sin sudo)"
+  fi
+fi
+if command -v tailscale >/dev/null 2>&1; then
+  if [[ -n "$TS_TOKEN" ]]; then
+    echo "→ tailscale: uniendo a la tailnet con token"
+    tailscale up --authkey="$TS_TOKEN" --hostname="$ARBOL_ID" 2>/dev/null \
+      && echo "✅ árbol conectado a la tailnet" \
+      || echo "⚠️  tailscale up falló (revisa el token/permisos)"
+  else
+    echo "⚠️  sin TAILSCALE_TOKEN en .env: conecta manualmente con 'sudo tailscale up'"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # 1) .env — crear desde plantilla (nunca copiar el .env de otro árbol)

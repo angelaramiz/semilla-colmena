@@ -1,0 +1,19 @@
+# Excluir del build de Docker lo que no debe entrar en la imagen
+.git
+.venv
+__pycache__/
+*.py[oc]
+build/
+dist/
+*.egg-info
+.env
+.env.*
+!.env.example
+agent_memory/
+reportes/*.json
+reportes/*.md
+*.db
+# El Dockerfile/compose se re-copian pero se excluyen para no duplicar contexto
+Dockerfile
+docker-compose.yml
+.dockerignore

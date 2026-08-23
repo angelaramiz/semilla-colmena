@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auditor de Huella Digital - Agencia MCP</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Estilos personalizados -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="main-header">
+        <div class="header-container">
+            <div class="brand">
+                <span class="logo-icon">🔍</span>
+                <div>
+                    <h1>Auditor de Huella Digital</h1>
+                    <p class="subtitle">Agencia de Marketing con Orquestación IA | Control de Prospección</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <span id="user-info" class="user-info hidden">
+                    👤 <span id="current-username">Usuario</span> 
+                    <span id="user-badge" class="badge">Rol</span>
+                </span>
+                <button id="btn-logout" class="btn-secondary hidden">🚪 Cerrar Sesión</button>
+                <div class="system-status">
+                    <span class="status-indicator online"></span>
+                    <span class="status-text">Plataforma Activa</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- PANTALLA DE AUTENTICACIÓN (LOGIN / REGISTRO) -->
+    <div id="auth-container" class="auth-container">
+        <!-- Tarjeta de Login -->
+        <div id="login-card" class="auth-card">
+            <h2>🔑 Iniciar Sesión</h2>
+            <p class="auth-subtitle">Ingresa tus credenciales para acceder al auditor.</p>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-username">Usuario</label>
+                    <input type="text" id="login-username" required placeholder="Tu nombre de usuario">
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" required placeholder="Tu contraseña">
+                </div>
+                <div id="login-error" class="alert alert-error hidden"></div>
+                <button type="submit" class="btn-primary">Ingresar</button>
+            </form>
+            <div class="auth-footer">
+                ¿No tienes cuenta? <a href="#" id="link-to-register">Regístrate aquí</a>
+            </div>
+        </div>
+
+        <!-- Tarjeta de Registro -->
+        <div id="register-card" class="auth-card hidden">
+            <h2>📝 Crear Cuenta</h2>
+            <p class="auth-subtitle">Regístrate para solicitar acceso a la herramienta.</p>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-username">Nombre de Usuario</label>
+                    <input type="text" id="register-username" required placeholder="Ej: angel_sales">
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Correo Electrónico</label>
+                    <input type="email" id="register-email" required placeholder="Ej: ventas@marca.com">
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Contraseña</label>
+                    <input type="password" id="register-password" required placeholder="Crea una contraseña segura">
+                </div>
+                <div id="register-error" class="alert alert-error hidden"></div>
+                <button type="submit" class="btn-primary">Solicitar Acceso</button>
+            </form>
+            <div class="auth-footer">
+                ¿Ya tienes cuenta? <a href="#" id="link-to-login">Inicia sesión</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- PANTALLA DE ACCESO PENDIENTE -->
+    <div id="pending-container" class="pending-container hidden">
+        <div class="pending-card">
+            <span class="pending-icon">⏳</span>
+            <h2>Acceso en Espera</h2>
+            <p>Tu cuenta ha sido creada exitosamente pero se encuentra **pendiente de aprobación**.</p>
+            <p class="details">El administrador del sistema (el arquitecto de la infraestructura) debe autorizar tu acceso antes de que puedas realizar auditorías.</p>
+            <button id="btn-check-status" class="btn-primary">🔄 Comprobar Estado</button>
+        </div>
+    </div>
+
+    <!-- APLICACIÓN PRINCIPAL (AUDITOR Y PANEL ADMIN) -->
+    <main id="app-container" class="app-container hidden">
+        <!-- Panel Izquierdo: Configuración e Inputs -->
+        <section class="panel panel-inputs">
+            <div class="panel-header">
+                <h2>📋 Configurar Auditoría</h2>
+            </div>
+            
+            <form id="audit-form" class="audit-form">
+                <div class="form-group">
+                    <label for="negocio">📛 Nombre del Negocio <span class="required">*</span></label>
+                    <input type="text" id="negocio" required placeholder="Ej: Dental Smarts">
+                </div>
+
+                <div class="form-group">
+                    <label for="ciudad">📍 Ciudad y Estado <span class="required">*</span></label>
+                    <input type="text" id="ciudad" required placeholder="Ej: Monterrey, Nuevo León">
+                </div>
+
+                <div class="form-group">
+                    <label for="sitio">🌐 Sitio Web (Opcional)</label>
+                    <input type="text" id="sitio" placeholder="Ej: www.dentalsmarts.com">
+                </div>
+
+                <div class="form-group">
+                    <label for="ig">📸 Instagram (Opcional)</label>
+                    <input type="text" id="ig" placeholder="Ej: @dentalsmarts">
+                </div>
+
+                <div class="form-group">
+                    <label for="fb">📘 Facebook (Opcional)</label>
+                    <input type="text" id="fb" placeholder="Ej: facebook.com/dentalsmarts">
+                </div>
+
+                <div class="form-group">
+                    <label for="modelo-negocio">🏢 Modelo de Negocio (Opcional)</label>
+                    <select id="modelo-negocio">
+                        <option value="" selected>Auto-detectar con IA</option>
+                        <option value="local">Local Tradicional (Tienda física)</option>
+                        <option value="delivery">Delivery / Reparto (A domicilio)</option>
+                        <option value="ecommerce">E-commerce Puro (Tienda online)</option>
+                        <option value="saas">SaaS / Servicios Online</option>
+                        <option value="profesional">Profesional Independiente</option>
+                        <option value="marketplace">Marketplace / Agregador</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="contexto">📝 Contexto de la Empresa (Opcional)</label>
+                    <textarea id="contexto" placeholder="Ej: Solo vendemos a domicilio por Uber Eats y WhatsApp, no tenemos tienda física."></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="modo">⚙️ Modo de Ejecución</label>
+                    <select id="modo">
+                        <option value="local" selected>Local (Ollama / Llama 3.1)</option>
+                        <option value="produccion">Producción (OpenAI / Cloud)</option>
+                    </select>
+                </div>
+
+                <button type="submit" id="btn-submit" class="btn-primary">
+                    <span class="btn-text">🚀 Iniciar Auditoría</span>
+                    <div class="btn-loader hidden"></div>
+                </button>
+            </form>
+        </section>
+
+        <!-- Panel Derecho: Log en vivo y Reporte de Resultados -->
+        <section class="panel panel-output">
+            <div class="tabs-header">
+                <button class="tab-btn active" data-tab="tab-console">💻 Consola de Log</button>
+                <button class="tab-btn" id="tab-report-btn" data-tab="tab-report" disabled>📊 Reporte Estratégico</button>
+                <button class="tab-btn hidden" id="tab-admin-btn" data-tab="tab-admin">⚙️ Panel Admin</button>
+            </div>
+
+            <!-- Tab 1: Consola -->
+            <div class="tab-content active" id="tab-console">
+                <div class="console-wrapper">
+                    <div class="console-header">
+                        <span>Terminal Output</span>
+                        <button id="btn-clear-log" class="btn-secondary">🗑️ Limpiar</button>
+                    </div>
+                    <div id="console-log" class="console-log">
+                        <div class="log-line system">Listo para iniciar. Rellena los datos de la izquierda y haz clic en "Iniciar Auditoría".</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 2: Reporte -->
+            <div class="tab-content" id="tab-report">
+                <div id="report-view" class="report-view">
+                    <div class="no-report-placeholder">
+                        <span class="placeholder-icon">📊</span>
+                        <h3>No hay reporte activo</h3>
+                        <p>Inicia una auditoría para ver el análisis de marketing digital aquí.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 3: Panel Admin -->
+            <div class="tab-content" id="tab-admin">
+                <div class="admin-wrapper">
+                    <div class="admin-header">
+                        <h3>🔑 Gestión de Accesos de Usuarios</h3>
+                        <p>Como Administrador de la infraestructura, puedes autorizar, denegar o eliminar accesos aquí.</p>
+                    </div>
+                    <div class="admin-table-container">
+                        <table class="admin-table">
+                            <thead>
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th>Correo</th>
+                                    <th>Rol</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="admin-users-list">
+                                <!-- Filas de usuarios inyectadas por JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="main-footer">
+        <p>Lead Magnet Engine v1.0 | Desarrollado de forma privada para el equipo de ventas.</p>
+    </footer>
+
+    <!-- JS principal -->
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Bases de datos locales (contienen usuarios/hashes, aprobaciones, inventario)
+*.db
+*.sqlite
+*.sqlite3
+
+# Datos de runtime de la colmena (por árbol)
+shared/
+reportes/
+reportes_web/
+agent_memory/
+manifiesto.yaml
+
+# Logs y backups (evitan fugas por copias de seguridad)
+*.log
+*.bak
+*.tmp
+
+# Notas internas / docs de trabajo
+dosc/
+
+# Índice de CodeGraph (local por máquina, se regenera con codegraph init)
+.codegraph/
+
+# Virtual environments
+.venv

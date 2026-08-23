@@ -1,0 +1,44 @@
+# render.yaml
+services:
+  - type: web
+    name: digital-footprint-auditor
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn web_server:app --host 0.0.0.0 --port $PORT
+    envVars:
+      # --- Configuración de Base de Datos ---
+      - key: DATABASE_URL
+        sync: false # Se solicita al usuario al desplegar (ej. la URL de Supabase)
+
+      # --- Autenticación y Seguridad ---
+      - key: JWT_SECRET_KEY
+        generateValue: true # Render generará una clave aleatoria segura automáticamente
+
+      - key: ADMIN_USERNAME
+        value: admin
+
+      - key: ADMIN_EMAIL
+        value: admin@marketing.com
+
+      - key: ADMIN_PASSWORD
+        sync: false # Contraseña para el primer login del administrador (solicitada al desplegar)
+
+      # --- Configuración del LLM ---
+      - key: USE_LOCAL_LLM
+        value: "true"
+
+      - key: LOCAL_LLM_BASE_URL
+        sync: false # Dirección de tu túnel de ngrok/Cloudflare (ej. https://xxx.ngrok-free.app/v1)
+
+      - key: LOCAL_LLM_MODEL
+        value: "llama3.1:8b"
+
+      # --- Proveedor de Datos ---
+      - key: DATA_PROVIDER
+        value: "mock" # serpapi, google, serper o mock
+
+      - key: SERPAPI_KEY
+        sync: false
+        
+      - key: GOOGLE_API_KEY
+        sync: false

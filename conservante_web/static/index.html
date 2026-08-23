@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conservante — Arquitecto/Dev</title>
+<style>
+  :root{--bg:#0d0f13;--card:#161a21;--line:#262b36;--txt:#e8eaf0;--mut:#8a93a5;--ok:#2ecc71;--warn:#f39c12;--accent:#8e44ad;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;margin:0}
+  .rol{font-size:11px;background:#3a2b52;color:#c9a9ff;padding:3px 10px;border-radius:20px}
+  main{padding:24px;max-width:1000px;margin:0 auto}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+  input{background:#12151c;border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;flex:1}
+  .btn{background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer}
+  .btn:hover{filter:brightness(1.15)}
+  .btn.danger{background:#c0392b}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--mut)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)}
+  pre{background:#0a0c10;border:1px solid var(--line);padding:14px;border-radius:8px;overflow:auto;max-height:360px;font-size:12px;white-space:pre-wrap}
+  textarea{width:100%;height:90px;background:#12151c;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font-family:monospace}
+  label{font-size:12px;color:var(--mut)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🍄 Conservante</h1>
+  <span class="rol">Arquitecto / Dev · acceso completo a estructura y micelio</span>
+</header>
+<main>
+  <div class="bar">
+    <input id="token" placeholder="X-Conservante-Token">
+    <button class="btn" onclick="salud()">↻ Salud</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><h3>Salud de estructura</h3><button class="btn" onclick="salud()">Verificar</button></div>
+    <div class="card"><h3>Actualizar componentes</h3><button class="btn" onclick="post('/api/actualizar','{}')">Actualizar (git)</button></div>
+    <div class="card"><h3>Reparar estructura</h3><button class="btn" onclick="post('/api/reparar','{}')">Reparar</button></div>
+    <div class="card"><h3>Sincronizar manifiesto</h3><button class="btn" onclick="post('/api/sincronizar','{}')">Sincronizar</button></div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Consultar el grafo de código (CodeGraph)</h3>
+    <label>Pregunta / símbolo</label>
+    <input id="g-q" placeholder="estructura del orquestador" style="margin:6px 0">
+    <button class="btn" onclick="codegraph()">Explorar</button>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <h3>Aplicar parche (modificar archivo de estructura)</h3>
+    <label>Ruta relativa</label><input id="p-ruta" placeholder="core/llm_router.py" style="margin:6px 0">
+    <label>Contenido nuevo</label>
+    <textarea id="p-contenido" placeholder="nuevo contenido del archivo…"></textarea>
+    <div style="margin-top:10px"><button class="btn danger" onclick="parche()">Aplicar parche (con respaldo)</button></div>
+  </div>
+
+  <div style="margin-top:16px"><h3 style="color:var(--mut)">Resultado</h3><pre id="out">…</pre></div>
+</main>
+<script>
+const OUT = document.getElementById('out');
+const hd = () => ({ 'X-Conservante-Token': document.getElementById('token').value });
+function log(o){ OUT.textContent = typeof o==='string' ? o : JSON.stringify(o, null, 2); }
+async function req(url, opts={}){ opts.headers = Object.assign({}, hd(), opts.headers||{}); if(opts.body) opts.headers['Content-Type']='application/json'; const r=await fetch(url,opts); const j=await r.json().catch(()=>({raw:await r.text()})); if(!r.ok) throw new Error(j.detail||r.status); return j; }
+async function salud(){ try{ log(await req('/api/arbol')); }catch(e){ log('Error: '+e.message); } }
+async function post(url, body){ try{ log(await req(url,{method:'POST',body})); }catch(e){ log('Error: '+e.message); } }
+async function codegraph(){ try{ log(await req('/api/codegraph?q='+encodeURIComponent(document.getElementById('g-q').value))); }catch(e){ log('Error: '+e.message); } }
+async function parche(){ try{ log(await req('/api/parche',{method:'POST',body:JSON.stringify({ruta_relativa:document.getElementById('p-ruta').value, contenido:document.getElementById('p-contenido').value})})); }catch(e){ log('Error: '+e.message); } }
+salud();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+#!/bin/sh
+# pre-commit — escanea secretos antes de cada commit (funciona en cualquier cuenta de GitHub).
+# No depende de GitHub Actions (que requiere Pro). Instálalo con:
+#   git config core.hooksPath .githooks
+# o copia este archivo a .git/hooks/pre-commit (y hazlo ejecutable).
+set -e
+
+echo "🔍 [pre-commit] Auditoría de secretos..."
+PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+
+PY="python"
+command -v python >/dev/null 2>&1 || PY="python3"
+
+if ! "$PY" "$PROJECT_ROOT/scripts/check_secrets.py"; then
+    echo "✋ Commit cancelado: revisa los posibles secretos arriba."
+    exit 1
+fi

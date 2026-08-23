@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comandante — Mente Colmena</title>
+<style>
+  :root{--bg:#0f1115;--card:#1a1e26;--line:#2a2f3a;--txt:#e6e8ee;--mut:#8b93a3;--ok:#2ecc71;--off:#e74c3c;--unk:#f39c12;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+  header h1{font-size:18px;margin:0}
+  header .rol{font-size:11px;background:#333a49;padding:3px 8px;border-radius:20px;color:var(--mut)}
+  main{padding:24px;max-width:1100px;margin:0 auto}
+  .bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
+  .btn{background:#2b5cff;color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+  .btn:hover{filter:brightness(1.1)}
+  .btn.ghost{background:#2a2f3a}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn.danger{background:#c0392b}
+  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid var(--line)}
+  th{color:var(--mut);font-weight:600;background:#161a21}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+  .st-online{background:var(--ok)} .st-offline{background:var(--off)} .st-desconocido{background:var(--unk)}
+  .cell-actions{display:flex;gap:6px;flex-wrap:wrap}
+  pre{background:#0b0d11;border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:280px;font-size:12px;white-space:pre-wrap}
+  .log-title{font-weight:600;margin:18px 0 6px;color:var(--mut)}
+  form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+  input,select{background:#12151c;border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;font-size:13px}
+  .empty{color:var(--mut);padding:24px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <h1>🐝 Comandante</h1>
+  <span class="rol">Mente colmena · control de árboles</span>
+</header>
+<main>
+  <div class="bar">
+    <button class="btn" onclick="cargar()">↻ Actualizar</button>
+    <input id="token" placeholder="X-Comandante-Token (si está definido)" style="flex:1;max-width:320px">
+  </div>
+
+  <form id="reg-form">
+    <input id="r-id" placeholder="arbol_id" required>
+    <input id="r-host" placeholder="host (tailnet.ts.net / IP)" required style="flex:2">
+    <input id="r-user" placeholder="usuario" value="root">
+    <input id="r-puerto" type="number" placeholder="puerto" value="22" style="width:90px">
+    <select id="r-canal"><option value="ssh">ssh</option><option value="tailscale">tailscale</option></select>
+    <button class="btn" type="submit">+ Registrar árbol</button>
+  </form>
+
+  <table>
+    <thead><tr><th>Árbol</th><th>Host</th><th>Canal</th><th>Estado</th><th>Acciones</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+  <div class="log-title">Consola de comandos</div>
+  <form id="cmd-form">
+    <input id="cmd-arbol" placeholder="arbol_id" required style="width:180px">
+    <input id="cmd-texto" placeholder="comando (ej. uptime)" required style="flex:1">
+    <button class="btn" type="submit">Ejecutar</button>
+  </form>
+
+  <div class="log-title">Resultado</div>
+  <pre id="out">Selecciona una acción…</pre>
+</main>
+
+<script>
+const OUT = document.getElementById('out');
+function hd(){ return { 'X-Comandante-Token': document.getElementById('token').value } }
+function log(obj){ OUT.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); }
+
+async function req(url, opts={}){
+  opts.headers = Object.assign({}, hd(), opts.headers || {});
+  if (opts.body) opts.headers['Content-Type'] = 'application/json';
+  const r = await fetch(url, opts);
+  const j = await r.json().catch(()=>({raw:await r.text()}));
+  if (!r.ok) throw new Error((j.detail||r.status));
+  return j;
+}
+
+async function cargar(){
+  try{
+    const arr = await req('/api/arboles');
+    const tb = document.getElementById('tbody');
+    if(!arr.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">Sin árboles registrados</td></tr>'; return; }
+    tb.innerHTML = arr.map(a=>`
+      <tr>
+        <td><b>${a.arbol_id}</b><br><small style="color:var(--mut)">${a.nombre||''}</small></td>
+        <td>${a.host}:${a.puerto}</td>
+        <td>${a.canal}</td>
+        <td><span class="dot st-${a.estado}"></span>${a.estado}</td>
+        <td class="cell-actions">
+          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','ping')">Ping</button>
+          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','estado')">Estado</button>
+          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','upgrade')">Upgrade</button>
+        </td>
+      </tr>`).join('');
+  }catch(e){ log('Error al cargar: '+e.message); }
+}
+
+async function accion(id, tipo){
+  try{
+    if(tipo==='upgrade'){ if(!confirm('Propagar upgrade git a '+id+'?')) return; }
+    const j = await req(`/api/arboles/${id}/${tipo}`, {method:'POST', body: JSON.stringify(tipo==='upgrade'?{rama:'main'}:{})});
+    log(j);
+    cargar();
+  }catch(e){ log('Error: '+e.message); }
+}
+
+document.getElementById('reg-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  try{
+    const body = { arbol_id: document.getElementById('r-id').value, host: document.getElementById('r-host').value,
+      usuario: document.getElementById('r-user').value, puerto: Number(document.getElementById('r-puerto').value),
+      canal: document.getElementById('r-canal').value };
+    const j = await req('/api/arboles', {method:'POST', body: JSON.stringify(body)});
+    log(j); cargar();
+  }catch(err){ log('Error: '+err.message); }
+});
+
+document.getElementById('cmd-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  try{
+    const id = document.getElementById('cmd-arbol').value;
+    const comando = document.getElementById('cmd-texto').value;
+    const j = await req(`/api/arboles/${id}/comando`, {method:'POST', body: JSON.stringify({comando})});
+    log(j);
+  }catch(err){ log('Error: '+err.message); }
+});
+
+cargar();
+</script>
+</body>
+</html>

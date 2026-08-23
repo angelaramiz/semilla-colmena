@@ -1,0 +1,83 @@
+# docker-compose.yml — Colmena: desplegar un ÁRBOL según su rol.
+#
+# Usa perfiles (profiles) para elegir el rol del árbol:
+#   obrero     → Tronco + ramas 24/7 (web_server, puerto 8000)
+#   comandante → panel de control (comandante_web, puerto 8001)
+#   heredero   → igual que comandante (failover; activar con reclamar_comandancia)
+#
+# Uso:
+#   docker compose --profile obrero up -d          # servidor vivo 24/7
+#   docker compose --profile comandante up -d      # comandante bajo demanda
+#   docker compose --profile ollama up -d          # (opcional) Ollama local
+#
+# Requisitos: un .env en la raíz (lo genera sembrar.sh). Ollama es opcional.
+
+services:
+  obrero:
+    build: .
+    profiles: ["obrero"]
+    env_file: .env
+    environment:
+      ARBOL_ROL: obrero
+      # Si Ollama corre en la misma máquina (fuera de Docker), descomenta:
+      # LOCAL_LLM_BASE_URL: http://host.docker.internal:11434/v1
+    volumes:
+      - shared:/app/shared
+    restart: always            # 24/7
+    ports:
+      - "8000:8000"
+
+  comandante:
+    build: .
+    profiles: ["comandante", "heredero"]
+    env_file: .env
+    environment:
+      ARBOL_ROL: ${ARBOL_ROL:-comandante}
+      COMANDANTE_WEB_TOKEN: ${COMANDANTE_WEB_TOKEN:-}
+    volumes:
+      - shared:/app/shared
+    command: uvicorn comandante_web:app --host 0.0.0.0 --port 8001
+    restart: "no"              # cold start (replicas: 0 en el manifiesto)
+    ports:
+      - "8001:8001"
+
+  # --- Opcional: Ollama local (nutriente local). Requiere GPU/RAM suficiente.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama_models:/root/.ollama
+    command: ollama pull qwen3:27b
+    restart: "no"
+
+  # --- Micelio: agente de mantenimiento (salud/actualizar/reparar).
+  # Se ejecuta bajo demanda (el comandante o un cron lo invoca).
+  micelio:
+    build: .
+    profiles: ["micelio", "conservante"]
+    env_file: .env
+    environment:
+      ARBOL_ROL: ${ARBOL_ROL:-obrero}
+    volumes:
+      - shared:/app/shared
+    command: python main.py --micelio
+    restart: "no"
+
+  # --- Conservante: panel EXCLUSIVO del arquitecto/dev (estructura + micelio completo).
+  conservante_web:
+    build: .
+    profiles: ["conservante"]
+    env_file: .env
+    environment:
+      ARBOL_ROL: conservante
+      CONSERVANTE_WEB_TOKEN: ${CONSERVANTE_WEB_TOKEN:-}
+    volumes:
+      - shared:/app/shared
+    command: uvicorn conservante_web:app --host 0.0.0.0 --port 8002
+    restart: "no"
+    ports:
+      - "8002:8002"
+
+volumes:
+  shared:
+  ollama_models:

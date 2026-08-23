@@ -4,6 +4,11 @@ from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import bcrypt
+from dotenv import load_dotenv
+
+# Cargar el .env del proyecto para que db.py sea autocontenido
+# (sin esto, y al importarlo aislado, caería a SQLite aunque .env tenga Supabase).
+load_dotenv()
 
 # Obtener URL de base de datos desde entorno, por defecto a SQLite local
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///app_database.db")

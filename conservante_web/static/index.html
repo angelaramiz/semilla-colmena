@@ -65,12 +65,17 @@
 const OUT = document.getElementById('out');
 const hd = () => ({ 'X-Conservante-Token': document.getElementById('token').value });
 function log(o){ OUT.textContent = typeof o==='string' ? o : JSON.stringify(o, null, 2); }
-async function req(url, opts={}){ opts.headers = Object.assign({}, hd(), opts.headers||{}); if(opts.body) opts.headers['Content-Type']='application/json'; const r=await fetch(url,opts); const j=await r.json().catch(()=>({raw:await r.text()})); if(!r.ok) throw new Error(j.detail||r.status); return j; }
+async function req(url, opts={}){ opts.headers = Object.assign({}, hd(), opts.headers||{}); if(opts.body) opts.headers['Content-Type']='application/json'; const res = await fetch(url,opts); let j; try { j = await res.json(); } catch(e) { j = {raw: await res.text()}; } if(!res.ok) throw new Error(j.detail || res.status); return j; }
 async function salud(){ try{ log(await req('/api/arbol')); }catch(e){ log('Error: '+e.message); } }
 async function post(url, body){ try{ log(await req(url,{method:'POST',body})); }catch(e){ log('Error: '+e.message); } }
 async function codegraph(){ try{ log(await req('/api/codegraph?q='+encodeURIComponent(document.getElementById('g-q').value))); }catch(e){ log('Error: '+e.message); } }
 async function parche(){ try{ log(await req('/api/parche',{method:'POST',body:JSON.stringify({ruta_relativa:document.getElementById('p-ruta').value, contenido:document.getElementById('p-contenido').value})})); }catch(e){ log('Error: '+e.message); } }
-salud();
+// Al cargar, solo hacer salud() si el operador ya pegó su token (evita 401 espurio)
+if (document.getElementById('token').value.trim() === '') {
+  log('Pega tu X-Conservante-Token en el campo superior y pulsa ↻ Salud.');
+} else {
+  salud();
+}
 </script>
 </body>
 </html>

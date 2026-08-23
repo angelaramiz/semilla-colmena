@@ -41,6 +41,73 @@ case "$ARBOL_ROL" in
   *) echo "❌ Rol inválido: $ARBOL_ROL (obrero|comandante|conservante|heredero)"; exit 1 ;;
 esac
 
+# ---------------------------------------------------------------------------
+# 0.5) AUTO-BOOTSTRAP — la semilla prepara su propio entorno antes de germinar
+# ---------------------------------------------------------------------------
+REPO_GIT="https://github.com/angelaramiz/semilla-colmena.git"
+DOCKER_FLAG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --docker)  DOCKER_FLAG="1"; shift ;;
+    --no-install) echo "→ --no-install: no se instalarán precondiciones del sistema"; shift ;;
+    *) break ;;
+  esac
+done
+
+is_root() { [ "$(id -u 2>/dev/null)" = "0" ]; }
+has_sudo() { command -v sudo >/dev/null 2>&1; }
+can_install() { is_root || has_sudo; }
+# Ejecuta un comando de instalación con privilegios (root directo o sudo).
+_priv() { if is_root; then "$@"; else sudo "$@"; fi; }
+
+echo "→ [BOOTSTRAP] verificando precondiciones base..."
+
+# --- git ---
+if ! command -v git >/dev/null 2>&1; then
+  if can_install; then
+    echo "→ instalando git (sudo)..."
+    _priv apt-get -y install git 2>/dev/null || _priv apt install -y git 2>/dev/null || echo "⚠️  no se pudo instalar git"
+  else
+    echo "⚠️  git no disponible y sin sudo para instalarlo"
+  fi
+fi
+
+# --- curl ---
+if ! command -v curl >/dev/null 2>&1; then
+  if can_install; then
+    echo "→ instalando curl..."
+    _priv apt-get -y install curl 2>/dev/null || echo "⚠️  no se pudo instalar curl"
+  fi
+fi
+
+# --- python ---
+if ! command -v python >/dev/null 2>&1 && ! command -v python3 >/dev/null 2>&1; then
+  if can_install; then
+    echo "→ instalando python..."
+    _priv apt-get -y install python3 python3-pip 2>/dev/null || echo "⚠️  no se pudo instalar python"
+  fi
+fi
+
+# --- Docker (solo si --docker) ---
+if [[ -n "$DOCKER_FLAG" ]] && ! command -v docker >/dev/null 2>&1; then
+  echo "→ instalando Docker (--docker)..."
+  _priv sh -c "curl -fsSL https://get.docker.com/ | sh" 2>/dev/null || echo "⚠️  no se pudo instalar Docker"
+fi
+
+# --- AUTO-CLONADO: si no estamos dentro del repo, lo descargamos ---
+if [[ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]]; then
+  if [[ -n "$TARGET_DIR" ]]; then
+    ROOT="$TARGET_DIR"
+    if [[ ! -d "$ROOT/.git" ]]; then
+      echo "→ clonando la semilla en $ROOT"
+      mkdir -p "$ROOT"; git clone "$REPO_GIT" "$ROOT" 2>/dev/null || echo "⚠️  no se pudo clonar (revisa la URL/red)"
+    fi
+  else
+    echo "→ no estás dentro del repo; clonando la semilla..."
+    git clone "$REPO_GIT" semilla-colmena 2>/dev/null && cd semilla-colmena
+  fi
+fi
+
 # Resolver el directorio del árbol
 if [[ -n "$TARGET_DIR" ]]; then
   ROOT="$TARGET_DIR"

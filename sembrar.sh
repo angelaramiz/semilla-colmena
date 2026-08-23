@@ -117,6 +117,27 @@ if command -v tailscale >/dev/null 2>&1; then
   fi
 fi
 
+# 0e) SSH server key: verificar/generar clave para que el micelio/comandante
+#     conecte por ssh (puerto 22) como alternativa a Tailscale. No fatal.
+if command -v ssh-keygen >/dev/null 2>&1; then
+  SSH_DIR="${HOME}/.ssh"
+  SSH_KEY="${SSH_DIR}/id_ed25519"
+  if [[ -f "${SSH_KEY}" ]]; then
+    echo "→ ssh: ya existe clave ${SSH_KEY}"
+  else
+    mkdir -p "${SSH_DIR}"
+    echo "→ ssh: generando clave ed25519 para el árbol"
+    ssh-keygen -t ed25519 -f "${SSH_KEY}" -N "" -C "${ARBOL_ID}@colmena" >/dev/null 2>&1 \
+      && echo "✅ clave SSH generada" || echo "⚠️  no se pudo generar la clave SSH"
+  fi
+  if [[ -f "${SSH_KEY}.pub" ]]; then
+    echo "→ clave pública (cópiala al inventario del comandante):"
+    cat "${SSH_KEY}.pub"
+  fi
+else
+  echo "→ ssh-keygen no disponible; sin clave SSH (usa Tailscale o instala openssh)"
+fi
+
 # ---------------------------------------------------------------------------
 # 1) .env — crear desde plantilla (nunca copiar el .env de otro árbol)
 # ---------------------------------------------------------------------------

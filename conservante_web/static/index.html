@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Conservante — Arquitecto/Dev</title>
 <style>
-  :root{--bg:#0d0f13;--card:#161a21;--line:#262b36;--txt:#e8eaf0;--mut:#8a93a5;--ok:#2ecc71;--warn:#f39c12;--accent:#8e44ad;}
+  :root{--bg:#0d0f13;--card:#161a21;--line:#262b36;--txt:#e8eaf0;--mut:#8a93a5;--ok:#2ecc71;--warn:#f39c12;--accent:#8e44ad;--red:#e74c3c;--blue:#3498db;}
   *{box-sizing:border-box}
   body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--txt)}
   header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
@@ -14,16 +14,36 @@
   main{padding:24px;max-width:1000px;margin:0 auto}
   .bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
   input{background:#12151c;border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;flex:1}
-  .btn{background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer}
+  .btn{background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px}
   .btn:hover{filter:brightness(1.15)}
   .btn.danger{background:#c0392b}
+  .btn.sm{padding:5px 10px;font-size:12px}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
   .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
   .card h3{margin:0 0 10px;font-size:14px;color:var(--mut)}
-  .ok{color:var(--ok)} .warn{color:var(--warn)}
+  .ok{color:var(--ok)} .warn{color:var(--warn)} .red{color:var(--red)} .blue{color:var(--blue)}
   pre{background:#0a0c10;border:1px solid var(--line);padding:14px;border-radius:8px;overflow:auto;max-height:360px;font-size:12px;white-space:pre-wrap}
   textarea{width:100%;height:90px;background:#12151c;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:8px;font-family:monospace}
   label{font-size:12px;color:var(--mut)}
+
+  /* Trees table */
+  .trees-section{margin-top:20px}
+  .trees-section h2{font-size:16px;margin:0 0 12px;color:var(--mut);display:flex;align-items:center;gap:8px}
+  .trees-table{width:100%;border-collapse:collapse;font-size:13px}
+  .trees-table th{text-align:left;padding:10px 12px;background:#1a1e27;color:var(--mut);font-weight:600;border-bottom:2px solid var(--line)}
+  .trees-table td{padding:10px 12px;border-bottom:1px solid var(--line)}
+  .trees-table tr:hover td{background:#1a1e27}
+  .status-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  .status-dot.online{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+  .status-dot.offline{background:var(--red);box-shadow:0 0 6px var(--red)}
+  .status-dot.unknown{background:var(--mut)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600}
+  .badge.online{background:#1a3a2a;color:var(--ok)}
+  .badge.offline{background:#3a1a1a;color:var(--red)}
+  .badge.pending{background:#3a3a1a;color:var(--warn)}
+  .empty-state{color:var(--mut);font-style:italic;padding:20px;text-align:center}
+  .refresh-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+  .last-check{font-size:11px;color:var(--mut)}
 </style>
 </head>
 <body>
@@ -37,7 +57,23 @@
     <button class="btn" onclick="salud()">↻ Salud</button>
   </div>
 
-  <div class="grid">
+  <!-- ====== ÁRBOLES DE LA COLMENA ====== -->
+  <div class="trees-section card">
+    <h2>
+      <span>🌳 Árboles de la colmena</span>
+      <button class="btn sm" onclick="cargarArboles()" style="margin-left:auto">↻ Actualizar</button>
+    </h2>
+    <div class="refresh-bar">
+      <span class="last-check" id="last-check">—</span>
+      <label><input type="checkbox" id="auto-refresh" checked onchange="toggleAutoRefresh()"> Auto-refresh (15s)</label>
+    </div>
+    <div id="trees-container">
+      <div class="empty-state">Pega tu token y pulsa "Actualizar" para ver los árboles.</div>
+    </div>
+  </div>
+
+  <!-- ====== MANTENIMIENTO ====== -->
+  <div class="grid" style="margin-top:16px">
     <div class="card"><h3>Salud de estructura</h3><button class="btn" onclick="salud()">Verificar</button></div>
     <div class="card"><h3>Actualizar componentes</h3><button class="btn" onclick="post('/api/actualizar','{}')">Actualizar (git)</button></div>
     <div class="card"><h3>Reparar estructura</h3><button class="btn" onclick="post('/api/reparar','{}')">Reparar</button></div>
@@ -70,14 +106,55 @@ async function salud(){ try{ log(await req('/api/arbol')); }catch(e){ log('Error
 async function post(url, body){ try{ log(await req(url,{method:'POST',body})); }catch(e){ log('Error: '+e.message); } }
 async function codegraph(){ try{ log(await req('/api/codegraph?q='+encodeURIComponent(document.getElementById('g-q').value))); }catch(e){ log('Error: '+e.message); } }
 async function parche(){ try{ log(await req('/api/parche',{method:'POST',body:JSON.stringify({ruta_relativa:document.getElementById('p-ruta').value, contenido:document.getElementById('p-contenido').value})})); }catch(e){ log('Error: '+e.message); } }
-// Al cargar, solo hacer salud() si el operador ya pegó su token (evita 401 espurio)
-if (document.getElementById('token').value.trim() === '') {
-  log('Pega tu X-Conservante-Token en el campo superior y pulsa ↻ Salud.');
-} else {
-  salud();
+
+// ====== ÁRBOLES ======
+async function cargarArboles(){
+  const c = document.getElementById('trees-container');
+  if (!document.getElementById('token').value.trim()) { c.innerHTML = '<div class="empty-state">Pega tu token primero.</div>'; return; }
+  c.innerHTML = '<div class="empty-state">Verificando conexión de árboles…</div>';
+  try {
+    const arboles = await req('/api/arboles/estado');
+    if (!arboles.length) { c.innerHTML = '<div class="empty-state">No hay árboles registrados en Supabase.</div>'; return; }
+    let html = '<table class="trees-table"><thead><tr><th></th><th>Árbol</th><th>Rol</th><th>IP / Hostname</th><th>Estado DB</th><th>Última vez</th></tr></thead><tbody>';
+    for (const a of arboles) {
+      const cls = a.conectado ? 'online' : (a.estado_db === 'germinando' ? 'pending' : 'offline');
+      const dot = `<span class="status-dot ${cls}"></span>`;
+      const badge = `<span class="badge ${cls}">${a.conectado ? 'EN LINEA' : (a.estado_db === 'germinando' ? 'GERMINANDO' : 'OFFLINE')}</span>`;
+      const ip = a.ip || '—';
+      const host = a.hostname || '—';
+      const ago = a.updated_at ? timeAgo(a.updated_at) : '—';
+      html += `<tr><td>${dot}</td><td><strong>${a.arbol_id}</strong><br><small style="color:var(--mut)">${a.nombre || ''}</small></td><td>${a.rol}</td><td><code>${ip}</code><br><small>${host}</small></td><td>${badge}</td><td>${ago}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    c.innerHTML = html;
+    document.getElementById('last-check').textContent = 'Última verificación: ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    c.innerHTML = '<div class="empty-state red">Error: ' + e.message + '</div>';
+  }
 }
 
-// ---- Notificación de nacimiento de árboles (polling) ----
+function timeAgo(iso){
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.floor(diff/1000);
+  if (s < 60) return 'hace ' + s + 's';
+  const m = Math.floor(s/60);
+  if (m < 60) return 'hace ' + m + 'm';
+  const h = Math.floor(m/60);
+  if (h < 24) return 'hace ' + h + 'h';
+  return 'hace ' + Math.floor(h/24) + 'd';
+}
+
+// Auto-refresh trees
+let refreshInterval = null;
+function toggleAutoRefresh(){
+  if (document.getElementById('auto-refresh').checked){
+    refreshInterval = setInterval(cargarArboles, 15000);
+  } else {
+    clearInterval(refreshInterval); refreshInterval = null;
+  }
+}
+
+// ====== NOTIFICACIONES DE NACIMIENTO ======
 let ultimoArbolId = 0;
 let toastEl = null;
 function mostrarToast(msg){
@@ -95,11 +172,16 @@ async function checarNacimientos(){
         mostrarToast('🌱 Nació un árbol: ' + (a.arbol_id||'?') + ' (' + (a.rol||a.canal||'?') + ')');
       }
     }
-  }catch(e){ /* no hay token o servidor; ignorar silencioso */ }
+  }catch(e){}
 }
-// inicializar ultimoArbolId con el máximo actual y luego pollear
 (async ()=>{ try{ const todos = await req('/api/arboles'); todos.forEach(a=>{ if(a.id>ultimoArbolId) ultimoArbolId=a.id; }); }catch(e){} })();
 setInterval(checarNacimientos, 15000);
+toggleAutoRefresh();
+
+// Cargar árboles al inicio si hay token
+if (document.getElementById('token').value.trim() !== '') {
+  cargarArboles();
+}
 </script>
 </body>
 </html>

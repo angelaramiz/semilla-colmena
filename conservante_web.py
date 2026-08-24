@@ -15,6 +15,12 @@ Sin token definido, se niega el acceso por defecto (es un panel privilegiado).
 import os
 import sys
 import json
+import socket
+import subprocess
+import urllib.request
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
@@ -123,6 +129,66 @@ def api_arboles_nuevos(ultimo_id: int = 0, x_conservante_token: str | None = Hea
     """Devuelve los árboles 'nacidos' después de ultimo_id (para notificar el nacimiento)."""
     _authorize(x_conservante_token)
     return [a for a in listar_arboles() if a.get("id", 0) > ultimo_id]
+
+
+def _ping_host(ip: str, timeout: float = 2.0) -> bool:
+    """Verifica si un host responde por ping (TCP port 22 o ICMP fallback)."""
+    if not ip:
+        return False
+    try:
+        sock = socket.create_connection((ip, 22), timeout=timeout)
+        sock.close()
+        return True
+    except (socket.timeout, OSError):
+        pass
+    try:
+        r = subprocess.run(["ping", "-n", "1", "-w", "1500", ip],
+                           capture_output=True, timeout=timeout + 1)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
+def _consultar_supabase_arboles() -> list:
+    """Consulta la tabla arboles_remotos en Supabase."""
+    supa_url = os.getenv("SUPABASE_URL", "").rstrip("/")
+    supa_key = os.getenv("SUPABASE_PUBLISHABLE_KEY", "") or os.getenv("SUPABASE_ANON_KEY", "")
+    if not supa_url or not supa_key:
+        return []
+    try:
+        url = f"{supa_url}/rest/v1/arboles_remotos?select=*&order=created_at.desc"
+        req = urllib.request.Request(url, headers={
+            "apikey": supa_key,
+            "Authorization": f"Bearer {supa_key}",
+        })
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read())
+    except Exception:
+        return []
+
+
+@app.get("/api/arboles/estado")
+def api_arboles_estado(x_conservante_token: str | None = Header(default=None)):
+    """Devuelve la lista de árboles con su estado de conexión en tiempo real."""
+    _authorize(x_conservante_token)
+    arboles = _consultar_supabase_arboles()
+    resultado = []
+    for a in arboles:
+        ip = a.get("ip_tailscale") or a.get("host") or ""
+        conectado = _ping_host(ip) if ip else False
+        resultado.append({
+            "id": a.get("id"),
+            "arbol_id": a.get("arbol_id", "?"),
+            "nombre": a.get("nombre", ""),
+            "rol": a.get("rol", ""),
+            "ip": ip,
+            "hostname": a.get("hostname", ""),
+            "estado_db": a.get("estado", "desconocido"),
+            "conectado": conectado,
+            "created_at": a.get("created_at", ""),
+            "updated_at": a.get("updated_at", ""),
+        })
+    return resultado
 
 
 @app.get("/")

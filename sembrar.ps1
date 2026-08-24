@@ -67,6 +67,23 @@ Write-Host "→ ARBOL_ID=$ArbolId ROL=$Rol"
 if (Test-Bin uv) { Write-Host "→ uv sync ..."; uv sync 2>$null } 
 elseif (Test-Path "requirements.txt") { Write-Host "→ pip install ..."; python -m pip install -r requirements.txt 2>$null }
 
+# --- OLLAMA (Windows): instalar por CLI si falta y bajar modelo ---
+$OLLAMA_MODELO = if ($env:LOCAL_LLM_MODEL) { $env:LOCAL_LLM_MODEL } else { "qwen3:27b" }
+$OLLAMA_BASICO = if ($env:OLLAMA_MODELO_BASICO) { $env:OLLAMA_MODELO_BASICO } else { "qwen2.5:1.5b" }
+if (-not (Test-Bin ollama)) {
+  Write-Host "→ instalando Ollama (descarga el instalador de Windows)..."
+  try {
+    $exe = "$env:TEMP\OllamaSetup.exe"
+    Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" -OutFile $exe -UseBasicParsing -ErrorAction Stop
+    Start-Process -FilePath $exe -ArgumentList "/SILENT" -Wait
+    Write-Host "→ Ollama instalado; usa una nueva terminal."
+  } catch { Write-Host "⚠️  no se pudo descargar Ollama: $_" -ForegroundColor Yellow }
+}
+if (Test-Bin ollama) {
+  Write-Host "→ modelo básico: $OLLAMA_BASICO ..."; ollama pull $OLLAMA_BASICO 2>$null
+  Write-Host "→ modelo principal: $OLLAMA_MODELO ..."; ollama pull $OLLAMA_MODELO 2>$null
+}
+
 # --- DB ---
 Write-Host "→ inicializando BD (Supabase según .env) ..."
 python -c "from db import init_db; init_db()"

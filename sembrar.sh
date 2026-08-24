@@ -138,13 +138,25 @@ elif [[ -f "requirements.txt" ]]; then
   echo "→ pip install -r requirements.txt"
   $PY -m pip install -r requirements.txt -q || echo "⚠️  pip install falló"
 fi
-# 0b) Modelo local Ollama (nutriente local; no fatal si falta)
+# 0b) Modelo local Ollama (nutriente local). AUTÓNOMO: instala Ollama si falta.
+MODELO="${LOCAL_LLM_MODEL:-qwen3:27b}"
+MODELO_BASICO="${OLLAMA_MODELO_BASICO:-qwen2.5:1.5b}"   # modelo ligero (fallback sin GPU)
 if command -v ollama >/dev/null 2>&1; then
-  MODELO="${LOCAL_LLM_MODEL:-qwen3:27b}"
-  echo "→ ollama pull $MODELO"
-  ollama pull "$MODELO" 2>/dev/null || echo "⚠️  no se pudo descargar el modelo Ollama"
+  echo "→ ollama ya instalado"
 else
-  echo "→ ollama no instalado; instálalo para usar el modelo local"
+  echo "→ instalando Ollama por CLI (requiere sudo/root)..."
+  if can_install; then
+    _priv sh -c "curl -fsSL https://ollama.com/install.sh | sh" 2>/dev/null \
+      && echo "✅ Ollama instalado" || echo "⚠️  no se pudo instalar Ollama (revisa red/sudo)"
+  else
+    echo "⚠️  sin sudo para instalar Ollama; instálalo manualmente en https://ollama.com"
+  fi
+fi
+if command -v ollama >/dev/null 2>&1; then
+  echo "→ descargando modelo básico: $MODELO_BASICO ..."
+  ollama pull "$MODELO_BASICO" 2>/dev/null && echo "✅ modelo básico listo"
+  echo "→ descargando modelo principal: $MODELO ..."
+  ollama pull "$MODELO" 2>/dev/null && echo "✅ modelo principal listo" || echo "⚠️  no se pudo bajar $MODELO (¿recursos?)"
 fi
 # 0c) CodeGraph: instalar CLI + indexar el árbol (grafo para búsquedas del agente)
 if command -v npm >/dev/null 2>&1; then

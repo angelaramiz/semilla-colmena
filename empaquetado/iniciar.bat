@@ -8,11 +8,15 @@ setlocal
 set "SELFDIR=%~dp0"
 echo [iniciar] Consolidando y germinando la semilla ...
 
-REM ── Auto-actualización: pull ANTES de cargar maceta.ps1/sembrar.ps1 ──
-cd /d "%SELFDIR%"
-if exist ".git" (
+REM ── Auto-actualización: pull del repo y copiar scripts actualizados ──
+if exist "%SELFDIR%semilla-colmena\.git" (
   echo [iniciar] Actualizando repo ...
+  cd /d "%SELFDIR%semilla-colmena"
   git pull 2>&1 | findstr /v "^" >nul 2>&1
+  REM copiar scripts actualizados a la raíz
+  if exist "%SELFDIR%semilla-colmena\sembrar.ps1" copy /Y "%SELFDIR%semilla-colmena\sembrar.ps1" "%SELFDIR%sembrar.ps1" >nul
+  if exist "%SELFDIR%semilla-colmena\maceta.ps1"   copy /Y "%SELFDIR%semilla-colmena\maceta.ps1"   "%SELFDIR%maceta.ps1"   >nul
+  cd /d "%SELFDIR%"
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%SELFDIR%maceta.ps1" %1 %2

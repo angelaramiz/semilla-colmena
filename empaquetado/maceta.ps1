@@ -33,10 +33,19 @@ if ($yaEnMaceta -or $tieneSembrar) {
 Set-Location $maceta
 Write-Host "[maceta] Germinando ($ArbolId, rol=$Rol) ..." -ForegroundColor Cyan
 
-# ── Auto-actualización: pull ANTES de cargar sembrar.ps1 en memoria ──
-if (Test-Path ".git") {
-  Write-Host "[maceta] Actualizando repo (git pull) ..." -ForegroundColor DarkGray
+# ── Auto-actualización: pull del repo y copiar sembrar.ps1 actualizado ──
+$repoDir = Join-Path $maceta "semilla-colmena"
+if (Test-Path (Join-Path $repoDir ".git")) {
+  Write-Host "[maceta] Actualizando repo (git pull en semilla-colmena/) ..." -ForegroundColor DarkGray
+  Push-Location $repoDir
   git pull 2>&1 | Out-Null
+  Pop-Location
+  # copiar sembrar.ps1 actualizado desde el repo a la raíz de la maceta
+  $src = Join-Path $repoDir "sembrar.ps1"
+  if (Test-Path $src) {
+    Copy-Item $src (Join-Path $maceta "sembrar.ps1") -Force
+    Write-Host "[maceta] sembrar.ps1 actualizado desde el repo." -ForegroundColor DarkGray
+  }
 }
 
 $sembrar = Join-Path $maceta "sembrar.ps1"

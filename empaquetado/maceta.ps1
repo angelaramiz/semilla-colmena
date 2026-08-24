@@ -33,6 +33,12 @@ if ($yaEnMaceta -or $tieneSembrar) {
 Set-Location $maceta
 Write-Host "[maceta] Germinando ($ArbolId, rol=$Rol) ..." -ForegroundColor Cyan
 
+# ── Auto-actualización: pull ANTES de cargar sembrar.ps1 en memoria ──
+if (Test-Path ".git") {
+  Write-Host "[maceta] Actualizando repo (git pull) ..." -ForegroundColor DarkGray
+  git pull 2>&1 | Out-Null
+}
+
 $sembrar = Join-Path $maceta "sembrar.ps1"
 if (Test-Path $sembrar) {
   & powershell -NoProfile -ExecutionPolicy Bypass -File $sembrar $ArbolId -rol $Rol

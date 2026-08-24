@@ -117,15 +117,13 @@ $env:ARBOL_HEREDERO_DE = $HerederoDe
 
 Write-Host "→ ARBOL_ID=$ArbolId ROL=$Rol"
 
-# --- DEPENDENCIAS (robusto: con timeout y fallback a pip) ---
+# --- DEPENDENCIAS (uv sync → fallback a pip) ---
 Write-Host "→ instalando dependencias de Python (puede tardar unos minutos) ..."
 $deps_ok = $false
 if (Test-Bin uv) {
-  Write-Host "→ uv sync (con timeout 600s) ..."
-  # ejecutar uv sync con timeout; si tarda >600s, se aborta y cae a pip
-  $proc = Start-Process -FilePath "uv" -ArgumentList "sync" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\uv_out.txt" -RedirectStandardError "$env:TEMP\uv_err.txt"
-  if (-not $proc.WaitForExit(600000)) { Stop-Process -Id $proc.Id -Force; Write-Host "⚠️  uv sync tardó demasiado; probando pip ..." -ForegroundColor Yellow }
-  $deps_ok = ($proc.ExitCode -eq 0)
+  Write-Host "→ uv sync ..."
+  & uv sync 2>&1 | Out-Null
+  $deps_ok = ($LASTEXITCODE -eq 0)
 }
 if (-not $deps_ok) {
   if (Test-Path "requirements.txt") {

@@ -14,6 +14,9 @@ wheels/
 # Credenciales heredadas del árbol principal (local, no se suben)
 semillero/heredado.env
 
+# Semilla empaquetada (.exe contiene credenciales; se genera localmente)
+semilla-colmena.exe
+
 # Bases de datos locales (contienen usuarios/hashes, aprobaciones, inventario)
 *.db
 *.sqlite

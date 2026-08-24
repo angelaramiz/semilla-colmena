@@ -71,9 +71,13 @@ elseif (Test-Path "requirements.txt") { Write-Host "→ pip install ..."; python
 Write-Host "→ inicializando BD (Supabase según .env) ..."
 python -c "from db import init_db; init_db()"
 
-# --- Directora Humana ---
+# --- Directora Humana (AUTÓNOMO: no pide input, genera contraseña temporal) ---
 $DIR_PASS = $env:DIRECTORA_PASSWORD
-if (-not $DIR_PASS) { $DIR_PASS = Read-Host "Contraseña maestra de la Directora (vacío = omitir)" }
+$GEN_PASS = $null
+if (-not $DIR_PASS) {
+  $GEN_PASS = python -c "import secrets;print(secrets.token_urlsafe(18))"
+  $DIR_PASS = $GEN_PASS
+}
 if ($DIR_PASS) {
   $env:DIR_USER = if ($env:DIRECTORA_USERNAME) { $env:DIRECTORA_USERNAME } else { "directora" }
   $env:DIR_EMAIL = "directora@$ArbolId"
@@ -99,6 +103,20 @@ print('→ manifiesto.yaml generado')"
 # --- HEALTH ---
 python -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); print('→ modelos configurados')"
 
+# --- AUTO-REGISTRO en la nube (conecta el árbol a los principales) ---
+$TSIP = (tailscale ip -4 2>$null | Select-Object -First 1)
+$HostReg = if ($TSIP) { $TSIP } else { $env:COMPUTERNAME }
+$env:HOST_REG = $HostReg
+python -c "import os
+from db import registrar_arbol
+try:
+    r = registrar_arbol(os.environ['ARBOL_ID'], os.environ['HOST_REG'], usuario='root', canal='tailscale')
+    print('→ Árbol auto-registrado:', r.get('arbol_id'), '@', os.environ['HOST_REG'])
+except Exception as e:
+    print('→ (aviso) auto-registro:', str(e)[:120])"
+
 Write-Host "`n✅ Árbol [$ArbolId] (rol=$Rol) sembrado." -ForegroundColor Green
+if ($GEN_PASS) { Write-Host "⚠️  Contraseña temporal de la Directora: $GEN_PASS  (cámbiala)" -ForegroundColor Yellow }
+Write-Host "→ Registrado y visible en el panel del conservante."
 Write-Host "→ Revisa: .env (claves/tokens), credenciales, /shared, manifiesto.yaml"
 Write-Host "→ Red: tailscale up --authkey=... --hostname=$ArbolId (o clave SSH)"

@@ -76,6 +76,30 @@ if (document.getElementById('token').value.trim() === '') {
 } else {
   salud();
 }
+
+// ---- Notificación de nacimiento de árboles (polling) ----
+let ultimoArbolId = 0;
+let toastEl = null;
+function mostrarToast(msg){
+  if (!toastEl) { toastEl = document.createElement('div'); toastEl.style.cssText = 'position:fixed;top:16px;right:16px;background:#2b5cff;color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.3)'; document.body.appendChild(toastEl); }
+  toastEl.textContent = msg; toastEl.style.display = 'block';
+  clearTimeout(toastEl._t); toastEl._t = setTimeout(()=>{ toastEl.style.display='none'; }, 8000);
+}
+async function checarNacimientos(){
+  if (document.getElementById('token').value.trim() === '') return;
+  try{
+    const nuevos = await req('/api/arboles/nuevos?ultimo_id=' + ultimoArbolId);
+    if (nuevos && nuevos.length){
+      for (const a of nuevos){
+        if (a.id > ultimoArbolId) { ultimoArbolId = a.id; }
+        mostrarToast('🌱 Nació un árbol: ' + (a.arbol_id||'?') + ' (' + (a.rol||a.canal||'?') + ')');
+      }
+    }
+  }catch(e){ /* no hay token o servidor; ignorar silencioso */ }
+}
+// inicializar ultimoArbolId con el máximo actual y luego pollear
+(async ()=>{ try{ const todos = await req('/api/arboles'); todos.forEach(a=>{ if(a.id>ultimoArbolId) ultimoArbolId=a.id; }); }catch(e){} })();
+setInterval(checarNacimientos, 15000);
 </script>
 </body>
 </html>

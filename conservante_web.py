@@ -22,7 +22,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from micelio import servidor_mcp as mic
-from db import listar_aprobaciones, resolver_aprobacion
+from db import listar_aprobaciones, resolver_aprobacion, listar_arboles
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -109,6 +109,20 @@ def api_actualizar(x_conservante_token: str | None = Header(default=None)):
 def api_parche(body: ParcheBody, x_conservante_token: str | None = Header(default=None)):
     _authorize(x_conservante_token)
     return json.loads(mic.aplicar_parche(ruta_relativa=body.ruta_relativa, contenido=body.contenido))
+
+
+@app.get("/api/arboles")
+def api_arboles(x_conservante_token: str | None = Header(default=None)):
+    """Lista los árboles de la colmena registrados en la nube (arboles_remotos)."""
+    _authorize(x_conservante_token)
+    return listar_arboles()
+
+
+@app.get("/api/arboles/nuevos")
+def api_arboles_nuevos(ultimo_id: int = 0, x_conservante_token: str | None = Header(default=None)):
+    """Devuelve los árboles 'nacidos' después de ultimo_id (para notificar el nacimiento)."""
+    _authorize(x_conservante_token)
+    return [a for a in listar_arboles() if a.get("id", 0) > ultimo_id]
 
 
 @app.get("/")

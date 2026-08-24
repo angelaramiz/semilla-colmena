@@ -258,11 +258,14 @@ fi
 echo "→ ARBOL_ID=$ARBOL_ID  ARBOL_NOMBRE=$ARBOL_NOMBRE  ROL=$ARBOL_ROL"
 
 # ---------------------------------------------------------------------------
-# 2) Credenciales de proveedores — pedir las que falten (sin echo en pantalla)
+# 2) Credenciales de proveedores — MODO AUTÓNOMO: no bloquea si faltan.
+#    El árbol opera con Ollama local (gratis) si no hay keys de cloud.
 # ---------------------------------------------------------------------------
-grep -qE '^OPENROUTER_API_KEY=.+$' .env || { read -r -s -p "OpenRouter API key para este árbol: " OR_KEY; echo; echo "OPENROUTER_API_KEY=$OR_KEY" >> .env; }
-grep -qE '^SERPAPI_KEY=.+$'         .env || { read -r -s -p "SerpAPI key (opcional): " SERP_KEY; echo; [[ -n "$SERP_KEY" ]] && echo "SERPAPI_KEY=$SERP_KEY" >> .env; }
-grep -qE '^GOOGLE_API_KEY=.+$'      .env || { read -r -s -p "Google Places key (opcional): " GOOG_KEY; echo; [[ -n "$GOOG_KEY" ]] && echo "GOOGLE_API_KEY=$GOOG_KEY" >> .env; }
+for _var in OPENROUTER_API_KEY SERPAPI_KEY SERPER_API_KEY GOOGLE_API_KEY; do
+  if ! grep -qE "^$_var=.+$" .env; then
+    echo "→ $_var no definida en .env; se omite (usará Ollama local / datos mock)."
+  fi
+done
 
 # ---------------------------------------------------------------------------
 # 3) Carpetas compartidas (aisladas por árbol)
@@ -277,16 +280,19 @@ $PY -c "from db import init_db; init_db()"
 echo "→ Base de datos inicializada (admin por defecto)"
 
 # ---------------------------------------------------------------------------
-# 5) Usuario Directora Humana (rol: directora_humana)
+# 5) Usuario Directora Humana (rol: directora_humana) — AUTÓNOMO
+#    Genera contraseña temporal segura si no viene de .env (no pide input).
 # ---------------------------------------------------------------------------
 DIR_USER="$(grep -E '^DIRECTORA_USERNAME=' .env | cut -d= -f2- | head -1)"
 DIR_USER="${DIR_USER:-directora}"
 DIR_EMAIL="${DIRECTORA_EMAIL:-directora@$ARBOL_ID}"
-if [[ -z "${DIRECTORA_PASSWORD:-}" ]]; then
-  read -r -s -p "Contraseña maestra de la Directora Humana: " DIR_PASS; echo
-  [[ -z "$DIR_PASS" ]] && { echo "⚠️  Contraseña vacía; se omite crear la Directora."; }
-else
+if [[ -n "${DIRECTORA_PASSWORD:-}" ]]; then
   DIR_PASS="$DIRECTORA_PASSWORD"
+  GEN_PASS=""
+else
+  DIR_PASS="$($PY -c 'import secrets;print(secrets.token_urlsafe(18))')"
+  GEN_PASS="$DIR_PASS"
+  echo "→ Directora: contraseña temporal generada automáticamente."
 fi
 if [[ -n "${DIR_PASS:-}" ]]; then
   export DIR_USER DIR_EMAIL DIR_PASS
@@ -324,6 +330,21 @@ ARBOL_ID="$ARBOL_ID_FINAL" ARBOL_ROL="$ARBOL_ROL" ARBOL_HEREDERO_DE="$HEREDERO_D
   $PY -c "from core.manifiesto import guardar_manifiesto; import os; r=guardar_manifiesto('manifiesto.yaml', os.getenv('ARBOL_ID','local'), rol=os.getenv('ARBOL_ROL','obrero'), heredero_de=os.getenv('ARBOL_HEREDERO_DE','')); print('→ Manifiesto Trinity:', r)"
 echo "→ Rol del árbol: $ARBOL_ROL"
 
+# Auto-registro en la nube (arboles_remotos) — conecta el árbol a los principales.
+# Host: IP de Tailscale si está, si no hostname local.
+TSIP="$(tailscale ip -4 2>/dev/null | head -1)"
+HOST_REG="${TSIP:-$(hostname -f 2>/dev/null || hostname)}"
+ARBOL_ID="$ARBOL_ID_FINAL" HOST_REG="$HOST_REG" \
+  $PY -c "
+import os
+from db import registrar_arbol
+try:
+    r = registrar_arbol(os.environ['ARBOL_ID'], os.environ['HOST_REG'], usuario='root', canal='tailscale')
+    print('→ Árbol auto-registrado:', r.get('arbol_id'), '@', os.environ['HOST_REG'])
+except Exception as e:
+    print('→ (aviso) no se pudo auto-registrar:', str(e)[:120])
+"
+
 # Health check: modelos + DB + directorio compartido
 $PY -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); from db import init_db; init_db(); print('→ Salud OK: modelos + DB')"
 [[ -d shared ]] && echo "→ /shared presente"
@@ -335,7 +356,9 @@ echo
 echo "✅ Árbol [$ARBOL_ID_FINAL] (rol=$ARBOL_ROL) MADURO."
 echo "   Germinado: dependencias instaladas, modelo local listo."
 echo "   Crecido  : .env + /shared + DB + roles + ramas."
-echo "   Maduro   : manifiesto.yaml generado para Trinity."
+echo "   Maduro   : manifiesto.yaml generado + auto-registro en la nube."
+[[ -n "${GEN_PASS:-}" ]] && echo "   ⚠️  Contraseña temporal de la Directora: $GEN_PASS  (cámbiala)"
+echo "   Conexión: el árbol quedó registrado y visible en el panel del conservante."
 echo "   Próximos pasos:"
 echo "   - obrero    : correr las ramas 24/7 (sistema completo)."
 echo "   - comandante: arrancar el panel web (comandante_web.py)."

@@ -24,9 +24,23 @@ Write-Host "→ [BOOTSTRAP] verificando precondiciones ..."
 
 function Test-Bin($n) { [bool](Get-Command $n -ErrorAction SilentlyContinue) }
 
-# --- Precondiciones base (solo avisa; el resto lo gestiona la semilla) ---
-if (-not (Test-Bin git)) { Write-Host "⚠️  git no instalado (winget install Git.Git)." -ForegroundColor Yellow }
-if (-not (Test-Bin python) ) { Write-Host "⚠️  python no detectable; se usará uv si existe." -ForegroundColor Yellow }
+# --- Precondiciones base (AUTÓNOMO: instala lo que falta) ---
+# Git
+if (-not (Test-Bin git)) {
+  Write-Host "→ git no instalado; instalando con winget ..." -ForegroundColor Yellow
+  try { winget install --id Git.Git -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }
+  catch { Write-Host "⚠️  no se pudo instalar git con winget; instálalo manualmente (git-scm.com, marcar 'Add to PATH')." -ForegroundColor Yellow }
+  # refrescar PATH de la sesión (winget no lo actualiza en el proceso actual)
+  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
+if (-not (Test-Bin git)) { Write-Host "⚠️  git sigue sin detectarse. Instálalo y vuelve a correr." -ForegroundColor Red; exit 1 }
+# Python
+if (-not (Test-Bin python)) {
+  Write-Host "→ python no detectable; instalando con winget ..."
+  try { winget install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }
+  catch { Write-Host "⚠️  no se pudo instalar python con winget." -ForegroundColor Yellow }
+  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
 
 # --- AUTO-CLONADO ---
 $InRepo = (Test-Path ".git")

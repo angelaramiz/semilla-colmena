@@ -72,21 +72,21 @@ if (-not $InRepo) {
     if (Test-Path "semilla-colmena\.git") {
       Write-Host "→ repo ya clonado; actualizando (git pull) ..."
       Set-Location semilla-colmena
-      git pull 2>$null
+      git pull 2>&1 | Out-Null
     } elseif (Test-Path "semilla-colmena") {
       Write-Host "⚠️  existe 'semilla-colmena' pero sin .git; entrando sin reclonar." -ForegroundColor Yellow
       Set-Location semilla-colmena
     } else {
       Write-Host "→ clonando la semilla ..."
-      git clone $REPO_GIT semilla-colmena 2>$null
+      git clone $REPO_GIT semilla-colmena 2>&1 | Out-Null
       Set-Location semilla-colmena
     }
   } else {
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
     if (Test-Path "$Dir\.git") {
-      Write-Host "→ repo en $Dir; git pull ..."; Set-Location $Dir; git pull 2>$null
+      Write-Host "→ repo en $Dir; git pull ..."; Set-Location $Dir; git pull 2>&1 | Out-Null
     } else {
-      Write-Host "→ clonando en $Dir"; git clone $REPO_GIT $Dir 2>$null; Set-Location $Dir
+      Write-Host "→ clonando en $Dir"; git clone $REPO_GIT $Dir 2>&1 | Out-Null; Set-Location $Dir
     }
   }
 }
@@ -130,7 +130,7 @@ if (Test-Bin uv) {
 if (-not $deps_ok) {
   if (Test-Path "requirements.txt") {
     Write-Host "→ pip install -r requirements.txt ..."
-    & python -m pip install --quiet -r requirements.txt 2>$null
+    & python -m pip install --quiet -r requirements.txt 2>&1 | Out-Null
     $deps_ok = ($LASTEXITCODE -eq 0)
   }
 }
@@ -149,8 +149,8 @@ if (-not (Test-Bin ollama)) {
   } catch { Write-Host "⚠️  no se pudo descargar Ollama: $_" -ForegroundColor Yellow }
 }
 if (Test-Bin ollama) {
-  Write-Host "→ modelo básico: $OLLAMA_BASICO ..."; ollama pull $OLLAMA_BASICO 2>$null
-  Write-Host "→ modelo principal: $OLLAMA_MODELO ..."; ollama pull $OLLAMA_MODELO 2>$null
+  Write-Host "→ modelo básico: $OLLAMA_BASICO ..."; ollama pull $OLLAMA_BASICO 2>&1 | Out-Null
+  Write-Host "→ modelo principal: $OLLAMA_MODELO ..."; ollama pull $OLLAMA_MODELO 2>&1 | Out-Null
 }
 
 # --- DB ---
@@ -190,7 +190,7 @@ print('→ manifiesto.yaml generado')"
 python -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); print('→ modelos configurados')"
 
 # --- AUTO-REGISTRO en la nube (conecta el árbol a los principales) ---
-$TSIP = (tailscale ip -4 2>$null | Select-Object -First 1)
+$TSIP = (tailscale ip -4 2>&1 | Select-Object -First 1)
 $HostReg = if ($TSIP) { $TSIP } else { $env:COMPUTERNAME }
 $env:HOST_REG = $HostReg
 python -c "import os

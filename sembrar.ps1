@@ -117,9 +117,24 @@ $env:ARBOL_HEREDERO_DE = $HerederoDe
 
 Write-Host "→ ARBOL_ID=$ArbolId ROL=$Rol"
 
-# --- DEPENDENCIAS ---
-if (Test-Bin uv) { Write-Host "→ uv sync ..."; uv sync 2>$null } 
-elseif (Test-Path "requirements.txt") { Write-Host "→ pip install ..."; python -m pip install -r requirements.txt 2>$null }
+# --- DEPENDENCIAS (robusto: con timeout y fallback a pip) ---
+Write-Host "→ instalando dependencias de Python (puede tardar unos minutos) ..."
+$deps_ok = $false
+if (Test-Bin uv) {
+  Write-Host "→ uv sync (con timeout 600s) ..."
+  # ejecutar uv sync con timeout; si tarda >600s, se aborta y cae a pip
+  $proc = Start-Process -FilePath "uv" -ArgumentList "sync" -NoNewWindow -PassThru -RedirectStandardOutput "$env:TEMP\uv_out.txt" -RedirectStandardError "$env:TEMP\uv_err.txt"
+  if (-not $proc.WaitForExit(600000)) { Stop-Process -Id $proc.Id -Force; Write-Host "⚠️  uv sync tardó demasiado; probando pip ..." -ForegroundColor Yellow }
+  $deps_ok = ($proc.ExitCode -eq 0)
+}
+if (-not $deps_ok) {
+  if (Test-Path "requirements.txt") {
+    Write-Host "→ pip install -r requirements.txt ..."
+    & python -m pip install --quiet -r requirements.txt 2>$null
+    $deps_ok = ($LASTEXITCODE -eq 0)
+  }
+}
+if (-not $deps_ok) { Write-Host "⚠️  no se completaron las dependencias; continúa pero puede fallar más adelante." -ForegroundColor Yellow }
 
 # --- OLLAMA (Windows): instalar por CLI si falta y bajar modelo ---
 $OLLAMA_MODELO = if ($env:LOCAL_LLM_MODEL) { $env:LOCAL_LLM_MODEL } else { "qwen3:27b" }

@@ -53,7 +53,12 @@ if ($Rol -notin @("obrero","comandante","conservante","heredero")) {
 
 # --- .env ---
 if (Test-Path ".env") { Write-Host "→ .env ya existe." }
-else { if (-not (Test-Path ".env.example")) { Write-Host "❌ sin .env.example." -ForegroundColor Red; exit 1 }; Copy-Item ".env.example" ".env" }
+else {
+  if (-not (Test-Path ".env.example")) { Write-Host "❌ sin .env.example." -ForegroundColor Red; exit 1 }
+  # HERENCIA DE ADN: semillero/heredado.env (credenciales reales del principal, gitignored)
+  if (Test-Path "semillero\heredado.env") { Copy-Item "semillero\heredado.env" ".env"; Write-Host "→ .env HEREDA credenciales del árbol principal" }
+  else { Copy-Item ".env.example" ".env"; Write-Host "→ .env desde plantilla" }
+}
 
 # fijar identidad (sobrescribe líneas si existen)
 $env:ARBOL_ID = $ArbolId

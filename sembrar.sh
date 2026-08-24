@@ -226,8 +226,15 @@ else
   if [[ ! -f ".env.example" ]]; then
     echo "❌ No se encontró .env.example (¿es este el repositorio semilla?)."; exit 1
   fi
-  cp .env.example .env
-  echo "→ .env creado desde .env.example"
+  # HERENCIA DE ADN: si existe semillero/heredado.env (credenciales reales del árbol principal,
+  # gitignored, no viaja con el clone), se usa como base para que el hijo herede las claves.
+  if [[ -f "semillero/heredado.env" ]]; then
+    cp semillero/heredado.env .env
+    echo "→ .env creado HEREDANDO credenciales del árbol principal (semillero/heredado.env)"
+  else
+    cp .env.example .env
+    echo "→ .env creado desde .env.example (sin heredar; rellena claves si las necesita)"
+  fi
 fi
 
 # JWT secret único (genera si no está seteado)

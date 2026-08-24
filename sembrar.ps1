@@ -18,7 +18,12 @@ param(
 $ErrorActionPreference = "Stop"
 
 # --- Codificación UTF-8 (para que la consola CMD muestre →, á, é, etc.) ---
-try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+try {
+  $enc = New-Object System.Text.UTF8Encoding($false)
+  [Console]::InputEncoding  = $enc
+  [Console]::OutputEncoding = $enc
+  $OutputEncoding = $enc
+} catch {}
 
 $REPO_GIT = "https://github.com/angelaramiz/semilla-colmena.git"
 
@@ -37,12 +42,27 @@ if (-not (Test-Bin git)) {
   $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 if (-not (Test-Bin git)) { Write-Host "⚠️  git sigue sin detectarse. Instálalo y vuelve a correr." -ForegroundColor Red; exit 1 }
-# Python
-if (-not (Test-Bin python)) {
-  Write-Host "→ python no detectable; instalando con winget ..."
+# Python — detecta el ALIAS falso de la Microsoft Store (que lanza la tienda y falla)
+function Python-Real { 
+  if (-not (Test-Bin python)) { return $false }
+  # si es el alias de Store, `python --version` no devuelve una versión real
+  try { $v = (python --version 2>&1 | Out-String).Trim(); return $v -match "Python \d" } catch { return $false }
+}
+if (-not (Python-Real)) {
+  Write-Host "→ python no disponible (o es el alias de Microsoft Store); instalando Python real con winget ..." -ForegroundColor Yellow
   try { winget install --id Python.Python.3.12 -e --silent --accept-package-agreements --accept-source-agreements | Out-Null }
   catch { Write-Host "⚠️  no se pudo instalar python con winget." -ForegroundColor Yellow }
   $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+  # deshabilitar el alias de ejecución de aplicaciones (app execution aliases) que interfiere
+  try {
+    $aliasUser = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps"
+    Remove-Item (Join-Path $aliasUser "python.exe") -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $aliasUser "python3.exe") -Force -ErrorAction SilentlyContinue
+  } catch {}
+}
+if (-not (Python-Real)) {
+  Write-Host "❌ Python no disponible. Instálalo (python.org marcando 'Add to PATH') y vuelve a correr." -ForegroundColor Red
+  exit 1
 }
 
 # --- AUTO-CLONADO (si la carpeta ya existe, hace pull; no falla) ---

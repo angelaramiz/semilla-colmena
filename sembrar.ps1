@@ -15,7 +15,7 @@ param(
   [string]$Dir = "",
   [string]$HerederoDe = ""
 )
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"   # evita que el stderr de git/pip/uv aborte el script
 
 # --- Codificación UTF-8 (para que la consola CMD muestre →, á, é, etc.) ---
 try {

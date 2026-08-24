@@ -17,6 +17,9 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# --- Codificación UTF-8 (para que la consola CMD muestre →, á, é, etc.) ---
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
 $REPO_GIT = "https://github.com/angelaramiz/semilla-colmena.git"
 
 Write-Host "`n===== SEMBRAR [$ArbolId] =====" -ForegroundColor Cyan
@@ -42,17 +45,29 @@ if (-not (Test-Bin python)) {
   $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
 }
 
-# --- AUTO-CLONADO ---
+# --- AUTO-CLONADO (si la carpeta ya existe, hace pull; no falla) ---
 $InRepo = (Test-Path ".git")
 if (-not $InRepo) {
   if ([string]::IsNullOrEmpty($Dir)) {
-    Write-Host "→ no estás dentro del repo; clonando la semilla ..."
-    git clone $REPO_GIT semilla-colmena 2>$null
-    Set-Location semilla-colmena
+    if (Test-Path "semilla-colmena\.git") {
+      Write-Host "→ repo ya clonado; actualizando (git pull) ..."
+      Set-Location semilla-colmena
+      git pull 2>$null
+    } elseif (Test-Path "semilla-colmena") {
+      Write-Host "⚠️  existe 'semilla-colmena' pero sin .git; entrando sin reclonar." -ForegroundColor Yellow
+      Set-Location semilla-colmena
+    } else {
+      Write-Host "→ clonando la semilla ..."
+      git clone $REPO_GIT semilla-colmena 2>$null
+      Set-Location semilla-colmena
+    }
   } else {
     New-Item -ItemType Directory -Force -Path $Dir | Out-Null
-    if (-not (Test-Path "$Dir\.git")) { Write-Host "→ clonando en $Dir"; git clone $REPO_GIT $Dir 2>$null }
-    Set-Location $Dir
+    if (Test-Path "$Dir\.git") {
+      Write-Host "→ repo en $Dir; git pull ..."; Set-Location $Dir; git pull 2>$null
+    } else {
+      Write-Host "→ clonando en $Dir"; git clone $REPO_GIT $Dir 2>$null; Set-Location $Dir
+    }
   }
 }
 

@@ -31,7 +31,7 @@ foreach ($d in @("core","orquestador","contenido","redes","analitica","investiga
 # Credenciales heredadas (ADN)
 if (Test-Path (Join-Path $root "semillero\heredado.env")) { Copy-Item (Join-Path $root "semillero\heredado.env") (Join-Path $staging "semillero\heredado.env") -Force }
 # Launcher
-Copy-Item (Join-Path $PSScriptRoot "maceta.bat") $staging -Force
+Copy-Item (Join-Path $PSScriptRoot "maceta.ps1") $staging -Force
 
 Write-Host "Generando semilla-colmena.exe ..." -ForegroundColor Cyan
 
@@ -42,12 +42,12 @@ if ($sevenZ -and $sfxStub) {
   Push-Location $staging
   & $sevenZ a -r -y $archive "*" | Out-Null
   Pop-Location
-  # config de 7z SFX: extrae y ejecuta maceta.bat
+  # config de 7z SFX: tras extraer, ejecuta maceta.ps1 (consolida en "maceta" y germina)
   $config = Join-Path $env:TEMP "semilla_config.txt"
   Set-Content -Path $config -Value @"
 ;!@Install@!UTF-8!
-InstallProgram=maceta.bat
-RunProgram="maceta.bat"
+Title=Semilla Colmena
+RunProgram="powershell.exe -NoProfile -ExecutionPolicy Bypass -File maceta.ps1"
 ;!@InstallEnd@!
 "@ -Encoding ASCII
   # concatenar stub + config + archivo

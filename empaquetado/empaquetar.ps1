@@ -30,8 +30,9 @@ foreach ($d in @("core","orquestador","contenido","redes","analitica","investiga
 }
 # Credenciales heredadas (ADN)
 if (Test-Path (Join-Path $root "semillero\heredado.env")) { Copy-Item (Join-Path $root "semillero\heredado.env") (Join-Path $staging "semillero\heredado.env") -Force }
-# Launcher
+# Launcher (autoejecuta) + respaldo manual
 Copy-Item (Join-Path $PSScriptRoot "maceta.ps1") $staging -Force
+Copy-Item (Join-Path $PSScriptRoot "iniciar.bat") $staging -Force
 
 Write-Host "Generando semilla-colmena.exe ..." -ForegroundColor Cyan
 

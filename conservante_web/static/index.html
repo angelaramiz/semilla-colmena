@@ -98,8 +98,16 @@
   <div style="margin-top:16px"><h3 style="color:var(--mut)">Resultado</h3><pre id="out">…</pre></div>
 </main>
 <script>
+const TOKEN_KEY = 'conservante_token';
+const tokenInput = document.getElementById('token');
+// Restaurar token guardado o usar el inyectado por el servidor
+const saved = localStorage.getItem(TOKEN_KEY);
+if (saved && !tokenInput.value) tokenInput.value = saved;
+// Guardar automáticamente al escribir
+tokenInput.addEventListener('input', () => localStorage.setItem(TOKEN_KEY, tokenInput.value));
+
 const OUT = document.getElementById('out');
-const hd = () => ({ 'X-Conservante-Token': document.getElementById('token').value });
+const hd = () => ({ 'X-Conservante-Token': tokenInput.value });
 function log(o){ OUT.textContent = typeof o==='string' ? o : JSON.stringify(o, null, 2); }
 async function req(url, opts={}){ opts.headers = Object.assign({}, hd(), opts.headers||{}); if(opts.body) opts.headers['Content-Type']='application/json'; const res = await fetch(url,opts); let j; try { j = await res.json(); } catch(e) { j = {raw: await res.text()}; } if(!res.ok) throw new Error(j.detail || res.status); return j; }
 async function salud(){ try{ log(await req('/api/arbol')); }catch(e){ log('Error: '+e.message); } }
@@ -178,9 +186,10 @@ async function checarNacimientos(){
 setInterval(checarNacimientos, 15000);
 toggleAutoRefresh();
 
-// Cargar árboles al inicio si hay token
-if (document.getElementById('token').value.trim() !== '') {
+// Auto-cargar árboles si el token ya está (inyectado o guardado)
+if (tokenInput.value.trim() !== '') {
   cargarArboles();
+  salud();
 }
 </script>
 </body>

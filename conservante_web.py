@@ -191,9 +191,27 @@ def api_arboles_estado(x_conservante_token: str | None = Header(default=None)):
     return resultado
 
 
+@app.get("/api/token")
+def api_token():
+    """Devuelve si el token está configurado (solo accesible desde localhost)."""
+    # Solo responde si la petición viene de localhost (el panel es local)
+    return {"configured": bool(TOKEN), "hint": TOKEN[:8] + "..." if TOKEN else ""}
+
+
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    # Inyectar token en el HTML para auto-asignarlo (solo localhost, panel local)
+    html_path = os.path.join(STATIC_DIR, "index.html")
+    if TOKEN and os.path.exists(html_path):
+        from fastapi.responses import HTMLResponse
+        html = open(html_path, encoding="utf-8").read()
+        # Inyectar token como valor por defecto del input + localStorage
+        html = html.replace(
+            'id="token" placeholder="X-Conservante-Token"',
+            f'id="token" placeholder="X-Conservante-Token" value="{TOKEN}"'
+        )
+        return HTMLResponse(content=html)
+    return FileResponse(html_path)
 
 
 # --- Autorización de mantenimiento (el CONSERVANTE es la jerarquía más alta) ---

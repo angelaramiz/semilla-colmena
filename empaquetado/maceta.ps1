@@ -40,11 +40,16 @@ if (Test-Path (Join-Path $repoDir ".git")) {
   Push-Location $repoDir
   git pull 2>&1 | Out-Null
   Pop-Location
-  # copiar sembrar.ps1 actualizado desde el repo a la raíz de la maceta
-  $src = Join-Path $repoDir "sembrar.ps1"
-  if (Test-Path $src) {
-    Copy-Item $src (Join-Path $maceta "sembrar.ps1") -Force
-    Write-Host "[maceta] sembrar.ps1 actualizado desde el repo." -ForegroundColor DarkGray
+  # copiar scripts actualizados desde el repo a la raíz de la maceta
+  foreach ($f in @("sembrar.ps1", "semillero/heredado.env")) {
+    $src = Join-Path $repoDir $f
+    $dst = Join-Path $maceta $f
+    if (Test-Path $src) {
+      $dstDir = Split-Path $dst -Parent
+      if (-not (Test-Path $dstDir)) { New-Item -ItemType Directory -Force -Path $dstDir | Out-Null }
+      Copy-Item $src $dst -Force
+      Write-Host "[maceta] $f actualizado desde el repo." -ForegroundColor DarkGray
+    }
   }
 }
 

@@ -16,6 +16,10 @@ if exist "%SELFDIR%semilla-colmena\.git" (
   REM copiar scripts actualizados a la raíz
   if exist "%SELFDIR%semilla-colmena\sembrar.ps1" copy /Y "%SELFDIR%semilla-colmena\sembrar.ps1" "%SELFDIR%sembrar.ps1" >nul
   if exist "%SELFDIR%semilla-colmena\maceta.ps1"   copy /Y "%SELFDIR%semilla-colmena\maceta.ps1"   "%SELFDIR%maceta.ps1"   >nul
+  if exist "%SELFDIR%semilla-colmena\semillero\heredado.env" (
+    if not exist "%SELFDIR%semillero" mkdir "%SELFDIR%semillero" >nul 2>&1
+    copy /Y "%SELFDIR%semilla-colmena\semillero\heredado.env" "%SELFDIR%semillero\heredado.env" >nul
+  )
   cd /d "%SELFDIR%"
 )
 

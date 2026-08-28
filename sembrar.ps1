@@ -60,10 +60,28 @@ if (-not (Python-Real)) {
     Remove-Item (Join-Path $aliasUser "python3.exe") -Force -ErrorAction SilentlyContinue
   } catch {}
 }
+# Fallback: descarga directa desde python.org si winget no existe o falló
+if (-not (Python-Real)) {
+  Write-Host "→ winget no disponible; descargando Python 3.12 desde python.org ..." -ForegroundColor Yellow
+  try {
+    $pyInst = "$env:TEMP\python-3.12.7-amd64.exe"
+    Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe" -OutFile $pyInst -UseBasicParsing -ErrorAction Stop
+    Start-Process -FilePath $pyInst -ArgumentList "/quiet InstallAllUsers=1 PrependPath=1" -Wait
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    # re-intentar quitar alias
+    try {
+      $aliasUser = Join-Path $env:LOCALAPPDATA "Microsoft\WindowsApps"
+      Remove-Item (Join-Path $aliasUser "python.exe") -Force -ErrorAction SilentlyContinue
+      Remove-Item (Join-Path $aliasUser "python3.exe") -Force -ErrorAction SilentlyContinue
+    } catch {}
+  } catch { Write-Host "⚠️  no se pudo descargar Python: $_" -ForegroundColor Yellow }
+}
 if (-not (Python-Real)) {
   Write-Host "❌ Python no disponible. Instálalo (python.org marcando 'Add to PATH') y vuelve a correr." -ForegroundColor Red
   exit 1
 }
+# Evitar "dubious ownership" cuando el repo fue clonado por otro usuario Windows
+try { git config --global --add safe.directory "*" 2>&1 | Out-Null } catch {}
 
 # --- AUTO-CLONADO (si la carpeta ya existe, hace pull; no falla) ---
 $InRepo = (Test-Path ".git")
@@ -120,6 +138,11 @@ Write-Host "→ ARBOL_ID=$ArbolId ROL=$Rol"
 # --- DEPENDENCIAS (uv sync → fallback a pip) ---
 Write-Host "→ instalando dependencias de Python (puede tardar unos minutos) ..."
 $deps_ok = $false
+if (-not (Test-Bin uv)) {
+  Write-Host "→ uv no encontrado; instalando con pip ..."
+  & python -m pip install --quiet uv 2>&1 | Out-Null
+  $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+}
 if (Test-Bin uv) {
   Write-Host "→ uv sync ..."
   & uv sync 2>&1 | Out-Null
@@ -134,7 +157,7 @@ if (-not $deps_ok) {
 }
 if (-not $deps_ok) { Write-Host "⚠️  no se completaron las dependencias; continúa pero puede fallar más adelante." -ForegroundColor Yellow }
 
-# --- OLLAMA (Windows): instalar por CLI si falta y bajar modelo ---
+# --- OLLAMA (Windows): instalar por CLI si falta, registrar como servicio y bajar modelos ---
 $OLLAMA_MODELO = if ($env:LOCAL_LLM_MODEL) { $env:LOCAL_LLM_MODEL } else { "qwen3:27b" }
 $OLLAMA_BASICO = if ($env:OLLAMA_MODELO_BASICO) { $env:OLLAMA_MODELO_BASICO } else { "qwen2.5:1.5b" }
 if (-not (Test-Bin ollama)) {
@@ -143,12 +166,43 @@ if (-not (Test-Bin ollama)) {
     $exe = "$env:TEMP\OllamaSetup.exe"
     Invoke-WebRequest -Uri "https://ollama.com/download/OllamaSetup.exe" -OutFile $exe -UseBasicParsing -ErrorAction Stop
     Start-Process -FilePath $exe -ArgumentList "/SILENT" -Wait
-    Write-Host "→ Ollama instalado; usa una nueva terminal."
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path","User")
+    Write-Host "→ Ollama instalado."
   } catch { Write-Host "⚠️  no se pudo descargar Ollama: $_" -ForegroundColor Yellow }
 }
 if (Test-Bin ollama) {
+  # Registrar Ollama como tarea de inicio para que persista tras reinicio
+  try {
+    $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue).Source
+    if (-not $ollamaExe) { $ollamaExe = "ollama" }
+    $batPath = "$env:APPDATA\ollama_serve.bat"
+    Set-Content -Path $batPath -Value "@echo off`r`n`"$ollamaExe`" serve" -Encoding ASCII -Force
+    schtasks /Create /TN "OllamaServe" /TR "`"$batPath`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null
+    # Iniciar ahora si no está corriendo
+    $isRunning = Get-Process -Name "ollama" -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*ollama*" }
+    if (-not $isRunning) {
+      Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
+      Start-Sleep -Seconds 5
+    }
+  } catch { Write-Host "⚠️  no se pudo registrar Ollama como servicio: $_" -ForegroundColor Yellow }
+
+  # Pull modelos con fallback (qwen3:27b no existe en registry, probar tamaños menores)
+  $modelosFallback = @($OLLAMA_MODELO, "qwen3:14b", "qwen3:8b", "qwen3:4b", "qwen2.5:7b")
+  $modelosFallback = $modelosFallback | Select-Object -Unique
+  foreach ($m in $modelosFallback) {
+    Write-Host "→ intentando modelo: $m ..."
+    ollama pull $m 2>&1 | Out-Null
+    $ok = (ollama list 2>&1 | Select-String -SimpleMatch $m)
+    if ($ok) {
+      if ($m -ne $OLLAMA_MODELO) {
+        Write-Host "→ $OLLAMA_MODELO no disponible, usando $m (actualizando .env)" -ForegroundColor Yellow
+        (Get-Content ".env" -Raw) -replace "LOCAL_LLM_MODEL=.*", "LOCAL_LLM_MODEL=$m" | Set-Content ".env" -NoNewline
+        $env:LOCAL_LLM_MODEL = $m
+      }
+      break
+    }
+  }
   Write-Host "→ modelo básico: $OLLAMA_BASICO ..."; ollama pull $OLLAMA_BASICO 2>&1 | Out-Null
-  Write-Host "→ modelo principal: $OLLAMA_MODELO ..."; ollama pull $OLLAMA_MODELO 2>&1 | Out-Null
 }
 
 # --- DB ---
@@ -187,8 +241,27 @@ print('→ manifiesto.yaml generado')"
 # --- HEALTH ---
 python -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); print('→ modelos configurados')"
 
+# --- TAILSCALE (idempotente: no re-loguea si ya está conectado) ---
+if (Test-Bin tailscale) {
+  $tsStatus = (tailscale status 2>&1 | Out-String)
+  $alreadyUp = $tsStatus -match "100\." -and $tsStatus -notmatch "Logged out|not logged in|NoState"
+  if (-not $alreadyUp -and $env:TAILSCALE_TOKEN) {
+    Write-Host "→ conectando Tailscale ..."
+    tailscale up --authkey=$env:TAILSCALE_TOKEN --hostname=$ArbolId 2>&1 | Out-Null
+    Start-Sleep -Seconds 3
+  } elseif ($alreadyUp) {
+    Write-Host "→ Tailscale ya conectado."
+  } elseif (-not $env:TAILSCALE_TOKEN) {
+    Write-Host "⚠️  TAILSCALE_TOKEN vacío; Tailscale no se conectará (configúralo en .env)" -ForegroundColor Yellow
+  }
+} else {
+  Write-Host "⚠️  Tailscale no instalado (opcional, se omitió)" -ForegroundColor Yellow
+}
+
 # --- AUTO-REGISTRO en la nube (conecta el árbol a los principales) ---
-$TSIP = (tailscale ip -4 2>&1 | Select-Object -First 1)
+$TSIP = ""
+try { $TSIP = (tailscale ip -4 2>&1 | Select-Object -First 1).ToString().Trim() } catch {}
+if (-not $TSIP -or $TSIP -match "failed|error|not logged") { $TSIP = "" }
 $HostReg = if ($TSIP) { $TSIP } else { $env:COMPUTERNAME }
 $env:HOST_REG = $HostReg
 python -c "import os

@@ -322,6 +322,39 @@ else:
     else:
         print('→ (aviso) registro en nube: HTTP ' + str(code))"
 
+# --- ARRANQUE PERSISTENTE 24/7 (según rol) ---
+# Registra los paneles web de este árbol como tareas de inicio (ONLOGON) y los
+# arranca ahora si no están escuchando. El python del venv es el que tiene uvicorn.
+$PY_ABS = "python"
+if (Test-Path $PY) { $PY_ABS = (Resolve-Path $PY).Path }
+$servicios = New-Object System.Collections.ArrayList
+
+# Panel específico según rol
+if ($Rol -eq "conservante") {
+  $p = if ($env:CONSERVANTE_WEB_PORT) { $env:CONSERVANTE_WEB_PORT } else { "8002" }
+  [void]$servicios.Add(@{ name="ConservanteWeb"; mod="conservante_web:app"; port=$p })
+} elseif ($Rol -eq "comandante") {
+  $p = if ($env:COMANDANTE_WEB_PORT) { $env:COMANDANTE_WEB_PORT } else { "8001" }
+  [void]$servicios.Add(@{ name="ComandanteWeb"; mod="comandante_web:app"; port=$p })
+}
+# Todo árbol vivo sirve su panel web local (obrero/comandante/conservante)
+[void]$servicios.Add(@{ name="ArbolWeb"; mod="web_server:app"; port="8000" })
+
+foreach ($svc in $servicios) {
+  $bat = Join-Path $env:APPDATA ("{0}.bat" -f $svc.name)
+  $svcMod = $svc.mod; $svcPort = $svc.port
+  $batContent = "@echo off`r`ncd /d `"$PWD`"`r`n`"$PY_ABS`" -m uvicorn $svcMod --host 127.0.0.1 --port $svcPort"
+  Set-Content -Path $bat -Value $batContent -Encoding ASCII -Force
+  try { schtasks /Create /TN $svc.name /TR "`"$bat`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null } catch {}
+  # Arrancar ahora si el puerto está libre
+  $yaEscucha = Get-NetTCPConnection -LocalPort $svcPort -State Listen -ErrorAction SilentlyContinue
+  if ($yaEscucha) {
+    Write-Host "→ $($svc.name) ya activo en :$svcPort"
+  } else {
+    try { Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $bat -WindowStyle Hidden | Out-Null; Write-Host "→ $($svc.name) iniciado en :$svcPort (24/7)" } catch { Write-Host "⚠️  no se pudo arrancar $($svc.name): $_" -ForegroundColor Yellow }
+  }
+}
+
 Write-Host "`n✅ Árbol [$ArbolId] (rol=$Rol) sembrado." -ForegroundColor Green
 if ($GEN_PASS) { Write-Host "⚠️  Contraseña temporal de la Directora: $GEN_PASS  (cámbiala)" -ForegroundColor Yellow }
 Write-Host "→ Registrado y visible en el panel del conservante."

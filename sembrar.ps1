@@ -157,6 +157,12 @@ if (-not $deps_ok) {
 }
 if (-not $deps_ok) { Write-Host "⚠️  no se completaron las dependencias; continúa pero puede fallar más adelante." -ForegroundColor Yellow }
 
+# --- PY: usar el python del venv si existe (uv sync instala ahí), si no, el del sistema ---
+$PY = "python"
+if (Test-Path ".venv\Scripts\python.exe") { $PY = ".venv\Scripts\python.exe" }
+elseif (Test-Path "venv\Scripts\python.exe") { $PY = "venv\Scripts\python.exe" }
+Write-Host "→ python: $PY"
+
 # --- OLLAMA (Windows): instalar por CLI si falta, registrar como servicio y bajar modelos ---
 $OLLAMA_MODELO = if ($env:LOCAL_LLM_MODEL) { $env:LOCAL_LLM_MODEL } else { "qwen3:27b" }
 $OLLAMA_BASICO = if ($env:OLLAMA_MODELO_BASICO) { $env:OLLAMA_MODELO_BASICO } else { "qwen2.5:1.5b" }
@@ -207,20 +213,20 @@ if (Test-Bin ollama) {
 
 # --- DB ---
 Write-Host "→ inicializando BD (Supabase según .env) ..."
-python -c "from db import init_db; init_db()"
+& $PY -c "from db import init_db; init_db()"
 
 # --- Directora Humana (AUTÓNOMO: no pide input, genera contraseña temporal) ---
 $DIR_PASS = $env:DIRECTORA_PASSWORD
 $GEN_PASS = $null
 if (-not $DIR_PASS) {
-  $GEN_PASS = python -c "import secrets;print(secrets.token_urlsafe(18))"
+  $GEN_PASS = & $PY -c "import secrets;print(secrets.token_urlsafe(18))"
   $DIR_PASS = $GEN_PASS
 }
 if ($DIR_PASS) {
   $env:DIR_USER = if ($env:DIRECTORA_USERNAME) { $env:DIRECTORA_USERNAME } else { "directora" }
   $env:DIR_EMAIL = "directora@$ArbolId"
-  $env:DIR_PASS = $DIR_PASS
-  python -c "import os
+$env:DIR_PASS = $DIR_PASS
+  & $PY -c "import os
 from db import SessionLocal
 from auth import crear_usuario
 db=SessionLocal()
@@ -233,13 +239,13 @@ finally:
 }
 
 # --- MANIFIESTO ---
-python -c "import os
+& $PY -c "import os
 from core.manifiesto import guardar_manifiesto
 guardar_manifiesto('manifiesto.yaml', os.environ['ARBOL_ID'], rol=os.environ['ARBOL_ROL'], heredero_de=os.environ.get('ARBOL_HEREDERO_DE',''))
 print('→ manifiesto.yaml generado')"
 
 # --- HEALTH ---
-python -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); print('→ modelos configurados')"
+& $PY -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; get_llm(RUTINA); get_llm(ESTRATEGIA); print('→ modelos configurados')"
 
 # --- TAILSCALE (idempotente: no re-loguea si ya está conectado) ---
 if (Test-Bin tailscale) {
@@ -264,13 +270,57 @@ try { $TSIP = (tailscale ip -4 2>&1 | Select-Object -First 1).ToString().Trim() 
 if (-not $TSIP -or $TSIP -match "failed|error|not logged") { $TSIP = "" }
 $HostReg = if ($TSIP) { $TSIP } else { $env:COMPUTERNAME }
 $env:HOST_REG = $HostReg
-python -c "import os
+$env:ARBOL_ROLE = $Rol
+# 1) Registro local vía db.py (escribe al DATABASE_URL; si Postgres no es alcanzable,
+#    db.py cae a SQLite local y el paso no es crítico porque el 2) va a la nube por REST).
+& $PY -c "import os
 from db import registrar_arbol
 try:
-    r = registrar_arbol(os.environ['ARBOL_ID'], os.environ['HOST_REG'], usuario='root', canal='tailscale')
-    print('→ Árbol auto-registrado:', r.get('arbol_id'), '@', os.environ['HOST_REG'])
+    r = registrar_arbol(
+        os.environ['ARBOL_ID'], os.environ['HOST_REG'], usuario='root', canal='tailscale',
+        rol=os.environ.get('ARBOL_ROLE','obrero'), ip_tailscale=os.environ.get('HOST_REG',''),
+        hostname=os.environ.get('COMPUTERNAME',''), estado='operativo'
+    )
+    print('→ Árbol registrado (DB):', r.get('arbol_id'), '(', r.get('rol'), ')')
 except Exception as e:
-    print('→ (aviso) auto-registro:', str(e)[:120])"
+    print('→ (aviso) registro local:', str(e)[:120])"
+
+# 2) Registro en la nube por REST (IPv4 fiable; es lo que el panel del conservante lee).
+$env:REG_NAME = if ($Nombre) { $Nombre } else { "Arbol $ArbolId" }
+& $PY -c "import os, json, urllib.request, urllib.error, urllib.parse
+url = os.environ.get('SUPABASE_URL','').rstrip('/')
+key = os.environ.get('SUPABASE_PUBLISHABLE_KEY','')
+if not url or not key:
+    print('→ (aviso) sin SUPABASE_URL/KEY; registro en nube omitido')
+else:
+    payload = {
+        'arbol_id': os.environ['ARBOL_ID'],
+        'nombre': os.environ.get('REG_NAME',''),
+        'rol': os.environ.get('ARBOL_ROLE','obrero'),
+        'host': os.environ.get('HOST_REG',''),
+        'ip_tailscale': os.environ.get('HOST_REG',''),
+        'hostname': os.environ.get('COMPUTERNAME',''),
+        'estado': 'operativo',
+    }
+    body = json.dumps(payload).encode()
+    H = {'apikey': key, 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'}
+    def _req(method, target, data=None):
+        rq = urllib.request.Request(target, data=data, method=method, headers=H)
+        try:
+            with urllib.request.urlopen(rq, timeout=20) as resp:
+                return resp.status, resp.read().decode('utf-8', 'replace')
+        except urllib.error.HTTPError as e:
+            return e.code, e.read().decode('utf-8', 'replace')
+    base = url + '/rest/v1/arboles_remotos'
+    code, _ = _req('POST', base, body)
+    if code in (200, 201):
+        print('→ Árbol registrado en la nube (nuevo).')
+    elif code == 409:
+        aid = urllib.parse.quote(os.environ['ARBOL_ID'])
+        code, _ = _req('PATCH', base + '?arbol_id=eq.' + aid, body)
+        print('→ Árbol actualizado en la nube (ya existía).' if code in (200, 204) else ('→ (aviso) PATCH ' + str(code)))
+    else:
+        print('→ (aviso) registro en nube: HTTP ' + str(code))"
 
 Write-Host "`n✅ Árbol [$ArbolId] (rol=$Rol) sembrado." -ForegroundColor Green
 if ($GEN_PASS) { Write-Host "⚠️  Contraseña temporal de la Directora: $GEN_PASS  (cámbiala)" -ForegroundColor Yellow }

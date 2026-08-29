@@ -1,7 +1,7 @@
 # db.py
 import os
 from datetime import datetime
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 import bcrypt
 from dotenv import load_dotenv
@@ -58,18 +58,24 @@ class ArbolRemoto(Base):
     id = Column(Integer, primary_key=True, index=True)
     arbol_id = Column(String(50), unique=True, index=True, nullable=False)
     nombre = Column(String(120), default="")
+    rol = Column(String(20), default="obrero")        # obrero | comandante | conservante | heredero
     host = Column(String(200), nullable=False)     # IP o hostname de Tailscale
+    ip_tailscale = Column(String(50), default="")
+    hostname = Column(String(120), default="")
     puerto = Column(Integer, default=22)           # puerto SSH
     canal = Column(String(20), default="ssh")      # ssh | tailscale
     usuario = Column(String(80), default="root")
     repo_dir = Column(String(300), default=".")    # ruta del repo en el hijo
-    estado = Column(String(20), default="desconocido")  # desconocido|online|offline
+    estado = Column(String(20), default="desconocido")  # desconocido|online|offline|operativo|germinando
     ultima_sincronizacion = Column(DateTime, nullable=True)
     ultimo_estado_msg = Column(Text, default="")
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def registrar_arbol(arbol_id: str, host: str, usuario: str = "root", puerto: int = 22,
-                    canal: str = "ssh", nombre: str = "", repo_dir: str = ".") -> dict:
+                    canal: str = "ssh", nombre: str = "", repo_dir: str = ".",
+                    rol: str = "obrero", ip_tailscale: str = "", hostname: str = "",
+                    estado: str = "operativo") -> dict:
     """Registra o actualiza un árbol hijo en el inventario del Comandante."""
     db = SessionLocal()
     try:
@@ -81,11 +87,17 @@ def registrar_arbol(arbol_id: str, host: str, usuario: str = "root", puerto: int
         arb.usuario = usuario
         arb.puerto = puerto
         arb.canal = canal
+        if rol: arb.rol = rol
+        if ip_tailscale: arb.ip_tailscale = ip_tailscale
+        if hostname: arb.hostname = hostname
+        if estado: arb.estado = estado
         if nombre: arb.nombre = nombre
         if repo_dir: arb.repo_dir = repo_dir
+        arb.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(arb)
-        return {"id": arb.id, "arbol_id": arb.arbol_id, "host": arb.host, "estado": arb.estado}
+        return {"id": arb.id, "arbol_id": arb.arbol_id, "host": arb.host, "rol": arb.rol,
+                "ip_tailscale": arb.ip_tailscale, "hostname": arb.hostname, "estado": arb.estado}
     finally:
         db.close()
 
@@ -93,7 +105,8 @@ def listar_arboles() -> list:
     """Lista los árboles registrados en el inventario."""
     db = SessionLocal()
     try:
-        return [{"id": a.id, "arbol_id": a.arbol_id, "nombre": a.nombre, "host": a.host,
+        return [{"id": a.id, "arbol_id": a.arbol_id, "nombre": a.nombre, "rol": a.rol,
+                 "host": a.host, "ip_tailscale": a.ip_tailscale, "hostname": a.hostname,
                  "puerto": a.puerto, "canal": a.canal, "usuario": a.usuario, "repo_dir": a.repo_dir,
                  "estado": a.estado, "ultima_sincronizacion":
                      a.ultima_sincronizacion.isoformat() if a.ultima_sincronizacion else None}
@@ -107,7 +120,8 @@ def buscar_arbol(arbol_id: str) -> dict | None:
         a = db.query(ArbolRemoto).filter(ArbolRemoto.arbol_id == arbol_id).first()
         if not a:
             return None
-        return {"id": a.id, "arbol_id": a.arbol_id, "nombre": a.nombre, "host": a.host,
+        return {"id": a.id, "arbol_id": a.arbol_id, "nombre": a.nombre, "rol": a.rol,
+                "host": a.host, "ip_tailscale": a.ip_tailscale, "hostname": a.hostname,
                 "puerto": a.puerto, "canal": a.canal, "usuario": a.usuario, "repo_dir": a.repo_dir,
                 "estado": a.estado}
     finally:
@@ -196,10 +210,52 @@ def resolver_aprobacion(aprobacion_id: int, decision: str, feedback: str = "") -
     finally:
         db.close()
 
+def _fallback_sqlite():
+    """Recrea engine/SessionLocal con SQLite local (fallback ante Postgres inalcanzable)."""
+    global engine, SessionLocal, DATABASE_URL
+    from sqlalchemy import create_engine as _ce
+    local = "sqlite:///" + os.path.join(os.path.dirname(os.path.abspath(__file__)), "app_database.db")
+    DATABASE_URL = local
+    engine = _ce(local, connect_args={"check_same_thread": False})
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
 def init_db():
+    # Resiliencia: si Postgres/Supabase es inalcanzable (p.ej. host solo-IPv6 sin ruta),
+    # cae a SQLite local para que el árbol pueda completar su germinación local.
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception:
+        _fallback_sqlite()
+        print("[WARN] Postgres/Supabase inalcanzable; usando SQLite local para esta operación.")
+
     # Crear las tablas si no existen
     Base.metadata.create_all(bind=engine)
-    
+
+    # Migración ligera: añadir columnas faltantes (ArbolRemoto) si el backend es PostgreSQL/Supabase
+    # (create_all NO altera tablas existentes; añadimos las columnas nuevas idempotentemente)
+    try:
+        if "postgres" in DATABASE_URL:
+            db = SessionLocal()
+            try:
+                from sqlalchemy import text as _text
+                for _col, _type in (
+                    ("rol", "VARCHAR(20) DEFAULT 'obrero'"),
+                    ("ip_tailscale", "VARCHAR(50)"),
+                    ("hostname", "VARCHAR(120)"),
+                    ("updated_at", "TIMESTAMPTZ DEFAULT now()"),
+                ):
+                    try:
+                        db.execute(_text(f"ALTER TABLE arboles_remotos ADD COLUMN IF NOT EXISTS {_col} {_type}"))
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+            finally:
+                db.close()
+    except Exception as e:
+        print(f"[WARN] migración arboles_remotos: {e}")
+
     # Crear administrador por defecto si no hay usuarios en la base de datos.
     # Las credenciales NUNCA van hardcodeadas en código: se leen de .env y, si faltan,
     # se generan temporales seguras (se imprimen una sola vez).

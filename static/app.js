@@ -46,7 +46,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- INICIALIZACIÓN DE LA APLICACIÓN (SPA ROUTER) ---
     async function initApp() {
+        // Panel abierto (obrero = consola de operaciones sin cuentas):
+        // sin token válido se entra como invitado en vez del muro de login.
         if (!token) {
+            try {
+                const info = await fetch('/api/arbol/info').then(r => r.json());
+                if (info && info.auth_requerida === false) {
+                    entrarComoInvitado();
+                    return;
+                }
+            } catch (e) { /* si /api/arbol/info falla, se sigue al login normal */ }
             showView('auth');
             return;
         }
@@ -83,8 +92,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } catch (err) {
             console.error("Error de sesión:", err);
+            try {
+                const info = await fetch('/api/arbol/info').then(r => r.json());
+                if (info && info.auth_requerida === false) { entrarComoInvitado(); return; }
+            } catch (e2) {}
             logout();
         }
+    }
+
+    function entrarComoInvitado() {
+        // Panel abierto (obrero): consola de operaciones sin cuentas.
+        // Admin/gates siguen exigiendo login real en sus endpoints.
+        currentUser = { username: 'operador', role: 'invitado', status: 'approved' };
+        token = '';
+        try { localStorage.removeItem('jwt_token'); } catch (e) {}
+        currentUsername.textContent = 'operador local';
+        userBadge.textContent = 'invitado';
+        userInfo.classList.remove('hidden');
+        btnLogout.classList.add('hidden');
+        tabAdminBtn.classList.add('hidden');
+        showView('app');
     }
 
     function showView(view) {

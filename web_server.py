@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import glob
 from typing import Generator, Optional, List
-from fastapi import FastAPI, Query, HTTPException, Depends, status
+from fastapi import FastAPI, Query, HTTPException, Depends, status, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,6 +35,37 @@ except Exception:
     _psutil = None
 
 _ARBOL_BOOT = time.time()
+
+# --- Modo de acceso al panel ---
+# Por arquitectura las cuentas viven en los árboles PRINCIPALES; el obrero es
+# consola de operaciones y opera abierto. `PANEL_ABIERTO` lo fuerza:
+# true/1/yes/on = abierto siempre; false/0/no/off = siempre con login.
+# Por defecto (auto): abierto solo si ARBOL_ROL == "obrero".
+# NUNCA abre: /api/admin/*, /api/aprobaciones* (Directora) ni /api/auth/me.
+def _panel_abierto() -> bool:
+    v = os.getenv("PANEL_ABIERTO", "").strip().lower()
+    if v in ("true", "1", "yes", "on", "si"):
+        return True
+    if v in ("false", "0", "no", "off"):
+        return False
+    return os.getenv("ARBOL_ROL", "") == "obrero"
+
+
+def get_approved_user_optional(request: Request, db: Session = Depends(get_db)):
+    """Auth opcional: en panel abierto permite invitado (None); si no, exige aprobado.
+
+    Los endpoints de gating (/api/aprobaciones, /api/admin) NO usan esta
+    dependencia: siempre exigen rol. Ver seguridad.md.
+    """
+    if _panel_abierto():
+        return None
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:].strip() if auth.lower().startswith("bearer ") else ""
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Se requiere iniciar sesión")
+    user = get_current_user(token, db)
+    return get_approved_user(user)
 
 # Asegurar encoding UTF-8 en Windows para subprocesses
 if sys.platform == "win32":
@@ -289,18 +320,21 @@ def audit_stream(
     fb: str = Query("", description="Facebook opcional"),
     modelo_negocio: str = Query("", description="Modelo de negocio opcional"),
     contexto: str = Query("", description="Contexto adicional opcional"),
-    token: str = Query(..., description="Token JWT para autorización"),
+    token: str = Query("", description="Token JWT (opcional si el panel opera abierto)"),
     db: Session = Depends(get_db)
 ):
-    """Endpoint protegido por JWT. Ejecuta la auditoría y hace streaming de los logs en vivo vía SSE"""
-    try:
-        user = get_current_user(token, db)
-        get_approved_user(user)
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="No autorizado o acceso bloqueado por administrador"
-        )
+    """Ejecuta la auditoría con streaming SSE. En panel abierto (obrero) no exige login."""
+    if _panel_abierto():
+        user = None  # invitado: consola de operaciones sin cuentas
+    else:
+        try:
+            user = get_current_user(token, db)
+            get_approved_user(user)
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="No autorizado o acceso bloqueado por administrador"
+            )
         
     return StreamingResponse(
         ejecutar_auditoria_sse(negocio, ciudad, modo, sitio, ig, fb, modelo_negocio, contexto),
@@ -308,16 +342,8 @@ def audit_stream(
     )
 
 @app.get("/api/reports/{report_id}")
-def obtener_reporte(report_id: str, current_user: User = Depends(get_approved_user)):
-    """Permite obtener un reporte previamente generado por su ID. Protegido para aprobados."""
-    file_path = os.path.join(WEB_REPORTES_DIR, f"reporte_{report_id}.json")
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail="Reporte no encontrado")
-    return FileResponse(file_path)
-
-@app.get("/api/reports/{report_id}")
-def obtener_reporte(report_id: str, current_user: User = Depends(get_approved_user)):
-    """Permite obtener un reporte previamente generado por su ID. Protegido para aprobados."""
+def obtener_reporte(report_id: str, request: Request, current_user: User = Depends(get_approved_user_optional)):
+    """Reporte por ID. En panel abierto (obrero) no exige login; si hay token se valida."""
     file_path = os.path.join(WEB_REPORTES_DIR, f"reporte_{report_id}.json")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
@@ -384,6 +410,7 @@ def arbol_info():
         "python": platform.python_version(),
         "cpu_nucleos": os.cpu_count() or 0,
         "git_rama": "", "git_head": "",
+        "auth_requerida": not _panel_abierto(),
     }
     try:
         r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],

@@ -81,6 +81,7 @@
   <div class="refresh">
     <h3 style="margin:0;color:var(--mut);font-size:15px">📋 Tareas del sistema</h3>
     <span><button class="btn" onclick="cargarTodo()">↻ Actualizar</button>
+    <button class="btn" onclick="actualizarRepo()" title="Trae lo último del repo (git pull)">⬇ Repo</button>
     <label class="small"><input type="checkbox" id="auto" checked onchange="toggleAuto()"> Auto (10s)</label></span>
   </div>
   <div class="card">
@@ -136,6 +137,17 @@ async function cargarTodo(){
   }catch(e){ c.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
 }
 function esc(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+async function actualizarRepo(){
+  const last = document.getElementById('last');
+  last.textContent = 'Actualizando repo…';
+  try{
+    const res = await fetch('/api/arbol/actualizar', {method:'POST'});
+    const j = await res.json();
+    if (j.ok && !j.cambio) last.textContent = 'Repo al día (' + (j.head_despues || '?') + ') · ' + new Date().toLocaleTimeString();
+    else if (j.ok && j.cambio) last.textContent = '⚠️ Actualizado ' + j.head_antes + ' → ' + j.head_despues + '. Reinicia el servicio para aplicar.';
+    else last.textContent = 'Error al actualizar: ' + (j.salida || 'desconocido').split('\n')[0];
+  }catch(e){ last.textContent = 'Error: ' + e.message; }
+}
 let iv = null;
 function toggleAuto(){
   if (document.getElementById('auto').checked) iv = setInterval(cargarTodo, 10000);

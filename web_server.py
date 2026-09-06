@@ -501,6 +501,45 @@ def arbol_tareas(limite: int = Query(25, ge=1, le=100)):
         pass
     return {"arbol_id": arbol_id, "tareas": tareas[:limite], "total": len(tareas)}
 
+
+def _repo_dir() -> str:
+    """Directorio raíz del repo (donde vive web_server.py)."""
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def _git_head(repo: str) -> str:
+    try:
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=10, cwd=repo)
+        return r.stdout.strip() if r.returncode == 0 else ""
+    except Exception:
+        return ""
+
+
+@app.post("/api/arbol/actualizar")
+def arbol_actualizar():
+    """Actualiza el código del árbol desde el repo (git pull --ff-only).
+
+    Usa fast-forward only: jamás destruye cambios locales; si hay
+    divergencia devuelve el error para resolución manual. Si el código
+    cambió, el servicio debe reiniciarse para aplicar (reinicio_requerido).
+    """
+    repo = _repo_dir()
+    antes = _git_head(repo)
+    try:
+        r = subprocess.run(["git", "pull", "--ff-only"],
+                           capture_output=True, text=True, timeout=120, cwd=repo)
+        salida = ((r.stdout or "") + "\n" + (r.stderr or "")).strip()[:1500]
+        despues = _git_head(repo)
+        cambio = bool(antes and despues and antes != despues)
+        return {"ok": r.returncode == 0, "salida": salida,
+                "head_antes": antes, "head_despues": despues,
+                "cambio": cambio, "reinicio_requerido": cambio}
+    except Exception as e:
+        return {"ok": False, "salida": str(e)[:500], "head_antes": antes,
+                "head_despues": despues if 'despues' in dir() else antes,
+                "cambio": False, "reinicio_requerido": False}
+
 # Servir frontend estático. Debe montarse al final para no interferir con las APIs.
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 

@@ -630,6 +630,16 @@ def arbol_actualizar():
                 "cambio": False, "reinicio_requerido": False}
 
 # Servir frontend estático. Debe montarse al final para no interferir con las APIs.
+@app.get("/", include_in_schema=False)
+def raiz():
+    """Portada según rol: en obrero, dashboard de recursos y tareas del árbol;
+    en principales, el auditor. El auditor siempre sigue en /index.html."""
+    base = os.path.dirname(os.path.abspath(__file__))
+    if os.getenv("ARBOL_ROL", "") == "obrero":
+        return FileResponse(os.path.join(base, "static", "arbol.html"))
+    return FileResponse(os.path.join(base, "static", "index.html"))
+
+
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 if __name__ == "__main__":

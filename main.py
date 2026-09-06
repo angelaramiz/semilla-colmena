@@ -31,7 +31,7 @@ def main():
     parser.add_argument("--ig", type=str, default="", help="Instagram (opcional)")
     parser.add_argument("--fb", type=str, default="", help="Facebook (opcional)")
     parser.add_argument("--output", "-o", type=str, help="Archivo de salida JSON (solo CLI)")
-    parser.add_argument("--modo", "-m", type=str, choices=["local", "produccion"], default="local", help="Modo de ejecución")
+    parser.add_argument("--modo", "-m", type=str, choices=["local", "produccion", "obrero"], default="local", help="Modo de ejecución: local (Ollama), produccion (cloud) u obrero (arquitectura de ramas, LLM local)")
     parser.add_argument("--modelo-negocio", "-mn", type=str, default="", help="Modelo de negocio (opcional)")
     parser.add_argument("--contexto", "-ctx", type=str, default="", help="Contexto adicional de la empresa (opcional)")
     parser.add_argument("--orquestador", action="store_true", help="Modo TRONCO: ejecutar el Orquestador de la agencia")
@@ -294,7 +294,17 @@ def main():
                 "modelo_negocio": args.modelo_negocio or "",
                 "contexto_empresa": args.contexto or ""
             }
-            crew = setup_crew(args.modo)
+            if args.modo == "obrero":
+                # Arquitectura obrera: delegar a la rama auditoria vía registro
+                # (contrato que usa el Tronco). La rama opera con LLM local.
+                from core.registro_ramas import REGISTRO_RAMAS
+                import importlib as _il
+                spec = REGISTRO_RAMAS["auditoria"]
+                mod = _il.import_module(spec["modulo"])
+                crew = getattr(mod, spec["funcion_crew"])("local")
+                print(f"🌿 Rama obrera [auditoria] vía registro de ramas | LLM local")
+            else:
+                crew = setup_crew(args.modo)
             resultado = crew.kickoff(inputs=inputs)
             reporte = extract_crew_result(resultado)
             

@@ -110,7 +110,7 @@ class AuditoriaApp(ctk.CTk):
         self.var_modo = ctk.StringVar(value="local")
         self.combo_modo = ctk.CTkOptionMenu(
             self.tab_individual, 
-            values=["local", "produccion"],
+            values=["local", "produccion", "obrero"],
             variable=self.var_modo,
             fg_color="#34495e",
             button_color="#2c3e50"

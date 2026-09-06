@@ -47,6 +47,14 @@ $headDespues = ""
 try { $headDespues = (git rev-parse --short HEAD 2>$null).Trim() } catch {}
 $codigoCambio = [bool]$headAntes -and [bool]$headDespues -and ($headAntes -ne $headDespues)
 if ($codigoCambio) { Write-Host "→ código nuevo ($headAntes → $headDespues): se reiniciarán servicios." -ForegroundColor Yellow }
+# Si el código cambió, este proceso corre la versión VIEJA (ya cargada en memoria):
+# relanzar el script actualizado una sola vez para operar siempre con lo nuevo.
+if ($codigoCambio -and -not $env:LEVANTAR_REEXEC -and $PSCommandPath) {
+  Write-Host "→ relanzando con la versión nueva ..."
+  $env:LEVANTAR_REEXEC = "1"
+  & powershell -NoProfile -ExecutionPolicy Bypass -File "$PSCommandPath"
+  exit $LASTEXITCODE
+}
 
 # --- 1. dependencias ---
 Write-Host "`n[2/5] Dependencias (uv sync) ..." -ForegroundColor Yellow

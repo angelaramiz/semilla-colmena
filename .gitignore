@@ -42,3 +42,6 @@ dosc/
 
 # Virtual environments
 .venv
+
+# Entorno de agentes colaborativos (solo local)
+.agents/

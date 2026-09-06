@@ -31,7 +31,7 @@ if (-not $isAdmin) {
   exit
 }
 
-Write-Host "`n===== PREPARAR ÁRBOL =====" -ForegroundColor Cyan
+Write-Host "`n===== PREPARAR ÁRBOL (v3 archivos sueltos) =====" -ForegroundColor Cyan
 
 Write-Host "`n[1/4] OpenSSH Server ..." -ForegroundColor Yellow
 try {

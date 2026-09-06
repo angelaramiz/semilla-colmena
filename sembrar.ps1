@@ -122,8 +122,14 @@ if ($Rol -notin @("obrero","comandante","conservante","heredero")) {
 if (Test-Path ".env") { Write-Host "→ .env ya existe." }
 else {
   if (-not (Test-Path ".env.example")) { Write-Host "❌ sin .env.example." -ForegroundColor Red; exit 1 }
-  # HERENCIA DE ADN: semillero/heredado.env (credenciales reales del principal, gitignored)
-  if (Test-Path "semillero\heredado.env") { Copy-Item "semillero\heredado.env" ".env"; Write-Host "→ .env HEREDA credenciales del árbol principal" }
+  # HERENCIA DE ADN: semillero/heredado.env (credenciales reales del principal, gitignored).
+  # Buscar en el repo Y en la raíz de la maceta (..\), que es donde el SFX lo deja
+  # (el clon nunca lo trae porque es gitignored).
+  $heredado = $null
+  foreach ($cand in @("semillero\heredado.env", "..\semillero\heredado.env")) {
+    if (Test-Path $cand) { $heredado = $cand; break }
+  }
+  if ($heredado) { Copy-Item $heredado ".env"; Write-Host "→ .env HEREDA credenciales del árbol principal (desde $heredado)" }
   else { Copy-Item ".env.example" ".env"; Write-Host "→ .env desde plantilla" }
 }
 

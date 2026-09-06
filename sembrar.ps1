@@ -349,7 +349,7 @@ if ($Rol -eq "conservante") {
 foreach ($svc in $servicios) {
   $bat = Join-Path $env:APPDATA ("{0}.bat" -f $svc.name)
   $svcMod = $svc.mod; $svcPort = $svc.port
-  $batContent = "@echo off`r`ncd /d `"$PWD`"`r`n`"$PY_ABS`" -m uvicorn $svcMod --host 127.0.0.1 --port $svcPort"
+  $batContent = "@echo off`r`nset AUTO_OPEN_BROWSER=false`r`ncd /d `"$PWD`"`r`n`"$PY_ABS`" -m uvicorn $svcMod --host 127.0.0.1 --port $svcPort"
   Set-Content -Path $bat -Value $batContent -Encoding ASCII -Force
   try { schtasks /Create /TN $svc.name /TR "`"$bat`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null } catch {}
   # Arrancar ahora si el puerto está libre

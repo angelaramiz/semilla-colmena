@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from micelio import servidor_mcp as mic
 from db import listar_aprobaciones, resolver_aprobacion, listar_arboles
+from core.auto_open import abrir_navegador_si_local
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 if HERE not in sys.path:
@@ -196,6 +197,14 @@ def api_token():
     """Devuelve si el token está configurado (solo accesible desde localhost)."""
     # Solo responde si la petición viene de localhost (el panel es local)
     return {"configured": bool(TOKEN), "hint": TOKEN[:8] + "..." if TOKEN else ""}
+
+
+@app.on_event("startup")
+def _startup():
+    # Auto-apertura del panel (opt-in por AUTO_OPEN_BROWSER, solo localhost).
+    # No toca index(): la inyección de token sigue intacta en el GET /.
+    _puerto = int(os.getenv("CONSERVANTE_WEB_PORT", "8002"))
+    abrir_navegador_si_local(f"http://127.0.0.1:{_puerto}/", host="127.0.0.1")
 
 
 @app.get("/")

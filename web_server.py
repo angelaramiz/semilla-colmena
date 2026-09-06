@@ -27,6 +27,7 @@ from auth import (
     get_admin_user,
     get_directora_user,
 )
+from core.auto_open import abrir_navegador_si_local
 
 try:
     import psutil as _psutil
@@ -45,6 +46,10 @@ app = FastAPI(title="Digital Footprint Auditor Web Service")
 @app.on_event("startup")
 def startup_event():
     init_db()
+    # Auto-apertura del panel (opt-in por AUTO_OPEN_BROWSER, solo localhost).
+    # El host se pasa explícito: la URL de apertura siempre es local; la
+    # guarda anti-remoto real es el flag (default false).
+    abrir_navegador_si_local("http://127.0.0.1:8000/", host="127.0.0.1")
 
 # Habilitar CORS
 app.add_middleware(

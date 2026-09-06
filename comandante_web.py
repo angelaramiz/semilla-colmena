@@ -24,6 +24,7 @@ from db import init_db, listar_arboles as db_listar_arboles, registrar_arbol as 
 from comunicacion.comandante_mcp import (
     ping_arbol, estado_arbol, ejecutar_comando, propagar_upgrade, propagar_archivo,
 )
+from core.auto_open import abrir_navegador_si_local
 
 # Asegurar sys.path para imports locales si se corre como `python comandante_web.py`
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -39,6 +40,9 @@ STATIC_DIR = os.path.join(HERE, "comandante_web", "static")
 @app.on_event("startup")
 def _startup():
     init_db()
+    # Auto-apertura del panel (opt-in por AUTO_OPEN_BROWSER, solo localhost).
+    _puerto = int(os.getenv("COMANDANTE_WEB_PORT", "8001"))
+    abrir_navegador_si_local(f"http://127.0.0.1:{_puerto}/", host="127.0.0.1")
 
 
 # --- Auth opcional --------------------------------------------------------

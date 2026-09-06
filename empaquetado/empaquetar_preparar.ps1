@@ -18,6 +18,7 @@ if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
 New-Item -ItemType Directory -Path $staging | Out-Null
 
 Copy-Item (Join-Path $PSScriptRoot "preparar.ps1") $staging -Force
+Copy-Item (Join-Path $PSScriptRoot "preparar.bat") $staging -Force
 
 Write-Host "Generando preparar-arbol.exe ..." -ForegroundColor Cyan
 
@@ -31,7 +32,7 @@ if ($sevenZ -and $sfxStub) {
   Set-Content -Path $config -Value @"
 ;!@Install@!UTF-8!
 Title=Preparar Arbol Colmena
-RunProgram="powershell.exe -NoProfile -ExecutionPolicy Bypass -File preparar.ps1"
+RunProgram="preparar.bat"
 ;!@InstallEnd@!
 "@ -Encoding ASCII
   $bytes = [System.IO.File]::ReadAllBytes($sfxStub) + [System.IO.File]::ReadAllBytes($config) + [System.IO.File]::ReadAllBytes($archive)

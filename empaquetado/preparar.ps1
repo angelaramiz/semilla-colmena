@@ -19,8 +19,15 @@ try {
 # --- Auto-elevación (un clic en UAC, sin consola manual) ---
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-  Write-Host "Solicitando permisos de administrador (acepta el aviso de Windows) ..."
-  Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
+  Write-Host "Solicitando permisos de administrador ..."
+  try {
+    Start-Process powershell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs -ErrorAction Stop
+    Write-Host "Ventana de administrador lanzada. Puedes cerrar esta."
+  } catch {
+    Write-Host "ERROR no se pudo elevar permisos: $_" -ForegroundColor Red
+    Write-Host "Causas posibles: tu cuenta no es administradora, UAC desactivado," -ForegroundColor Yellow
+    Write-Host "política de ejecución bloqueada o el antivirus intervino." -ForegroundColor Yellow
+  }
   exit
 }
 

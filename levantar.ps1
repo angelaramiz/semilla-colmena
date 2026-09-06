@@ -139,16 +139,25 @@ if ($tsOk) { Write-Host "OK  Tailscale $tsIp" -ForegroundColor Green }
 Write-Host "Listo: $(EnvVal 'ARBOL_ID' '?') ($(EnvVal 'ARBOL_ROL' '?'))"
 
 # --- Apertura web al terminar (solo sesión interactiva: doble clic) ---
-# Se abre SOLO el panel del árbol (:8000, el de la mercadóloga/operador local).
-# Los .bat fuerzan AUTO_OPEN_BROWSER=false así los servidores no duplican pestañas;
-# las tareas programadas (sesión 0) de todos modos no pueden mostrar ventanas.
+# Abre UN solo panel: LEVANTAR_URL si está definido, si no el ArbolWeb (:8000,
+# el panel del operador local en todo árbol). Los .bat fuerzan
+# AUTO_OPEN_BROWSER=false así los servidores no duplican pestañas; las tareas
+# programadas (sesión 0) de todos modos no pueden mostrar ventanas.
 # El :8001/:8002 siguen corriendo para gestión remota (tailnet).
 if ([Environment]::UserInteractive -and ((EnvVal "AUTO_OPEN_BROWSER" "false").Trim().ToLower() -in @("true","1","yes","on","si"))) {
-  $esc = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
-  if ($esc) {
-    Write-Host "→ abriendo http://127.0.0.1:8000/ ..."
-    Start-Process "http://127.0.0.1:8000/"
-  } else {
-    Write-Host "⚠️  :8000 no responde, no se abre el navegador." -ForegroundColor Yellow
+  $abrirUrl = (EnvVal "LEVANTAR_URL" "").Trim()
+  if (-not $abrirUrl) { $abrirUrl = "http://127.0.0.1:8000/" }
+  $abrirOk = $false
+  try {
+    $puertoAbrir = ([uri]$abrirUrl).Port
+    $esc = Get-NetTCPConnection -LocalPort $puertoAbrir -State Listen -ErrorAction SilentlyContinue
+    if ($esc) {
+      Write-Host "→ abriendo $abrirUrl ..."
+      Start-Process $abrirUrl
+      $abrirOk = $true
+    }
+  } catch {}
+  if (-not $abrirOk) {
+    Write-Host "⚠️  $abrirUrl no responde, no se abre el navegador." -ForegroundColor Yellow
   }
 }

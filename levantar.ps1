@@ -32,14 +32,15 @@ function EnvVal($k, $def = "") {
 Write-Host "`n===== LEVANTAR ÁRBOL =====" -ForegroundColor Cyan
 Write-Host "Repo: $repo"
 
-# --- 0. git: ownership + pull ---
-Write-Host "`n[1/5] Código (git pull) ..." -ForegroundColor Yellow
+# --- 0. git: ownership + actualización robusta (fetch+reset: el churn local
+# de uv.lock abortaría un pull/merge; en un árbol no hay cambios locales que guardar) ---
+Write-Host "`n[1/5] Código (fetch + reset) ..." -ForegroundColor Yellow
 try { git config --global --add safe.directory $repo 2>&1 | Out-Null } catch {}
 try {
-  $out = git pull 2>&1 | Out-String
-  if ($out -match "Already up to date") { Write-Host "Código al día." }
-  else { Write-Host ($out.Trim() -split "`n" | Select-Object -Last 2) }
-} catch { Write-Host "AVISO git pull: $_" -ForegroundColor Yellow }
+  git fetch origin 2>&1 | Out-Null
+  git reset --hard origin/main 2>&1 | Out-Null
+  Write-Host ("Código en: " + (git log --oneline -1 2>$null))
+} catch { Write-Host "AVISO actualización: $_" -ForegroundColor Yellow }
 
 # --- 1. dependencias ---
 Write-Host "`n[2/5] Dependencias (uv sync) ..." -ForegroundColor Yellow
@@ -97,14 +98,20 @@ if ($rol -eq "conservante") {
   [void]$servicios.Add(@{ n="ComandanteWeb"; m="comandante_web:app"; p=(EnvVal "COMANDANTE_WEB_PORT" "8001") })
 }
 [void]$servicios.Add(@{ n="ArbolWeb"; m="web_server:app"; p="8000" })
+$startedHere = @()
 foreach ($s in $servicios) {
   $esc = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
   if ($esc) { Write-Host "$($s.n) ya activo en :$($s.p)" -ForegroundColor Green; continue }
   $bat = Join-Path $env:APPDATA ($s.n + ".bat")
   Set-Content -Path $bat -Value ('@echo off' + "`r`n" + 'cd /d "' + $repo + '"' + "`r`n" + '"' + $PY + '" -m uvicorn ' + $s.m + ' --host 127.0.0.1 --port ' + $s.p) -Encoding ASCII -Force
   try { schtasks /Create /TN $s.n /TR "`"$bat`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null } catch {}
-  try { Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $bat -WindowStyle Hidden | Out-Null; Write-Host "$($s.n) arrancando en :$($s.p) ..." }
-  catch { Write-Host "AVISO no se pudo arrancar $($s.n): $_" -ForegroundColor Yellow }
+  # Arrancar ahora si el puerto está libre
+  $yaEscucha = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
+  if ($yaEscucha) {
+    Write-Host "→ $($s.n) ya activo en :$s.p"
+  } else {
+    try { Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $bat -WindowStyle Hidden | Out-Null; Write-Host "→ $($s.n) iniciado en :$s.p (24/7)"; $startedHere += @($s.p) } catch { Write-Host "⚠️  no se pudo arrancar $($s.n): $_" -ForegroundColor Yellow }
+  }
 }
 Start-Sleep 6
 Write-Host "`n===== RESUMEN =====" -ForegroundColor Cyan
@@ -115,3 +122,19 @@ foreach ($s in $servicios) {
 }
 if ($tsOk) { Write-Host "OK  Tailscale $tsIp" -ForegroundColor Green }
 Write-Host "Listo: $(EnvVal 'ARBOL_ID' '?') ($(EnvVal 'ARBOL_ROL' '?'))"
+
+# --- Apertura web al terminar (solo sesión interactiva: doble clic) ---
+# Los servicios de tareas programadas (sesión 0) no pueden mostrar ventanas;
+# esto abre el navegador solo cuando un humano ejecuta Levantar. Se abren los
+# paneles que YA estaban activos (los recién iniciados aquí abren su propio
+# navegador desde su evento startup al terminar de arrancar).
+if ([Environment]::UserInteractive -and ((EnvVal "AUTO_OPEN_BROWSER" "false").Trim().ToLower() -in @("true","1","yes","on","si"))) {
+  foreach ($s in $servicios) {
+    if ($startedHere -contains $s.p) { continue }
+    $esc = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
+    if ($esc) {
+      Write-Host "→ abriendo http://127.0.0.1:$($s.p)/ ..."
+      Start-Process ("http://127.0.0.1:" + $s.p + "/")
+    }
+  }
+}

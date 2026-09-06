@@ -81,17 +81,30 @@ if ($tsOk) { Write-Host "Tailscale conectado. IP: $tsIp" -ForegroundColor Green 
 else { Write-Host "Tailscale no disponible desde esta sesión (revisa la app)." -ForegroundColor Yellow }
 
 # --- 3. Ollama (solo arrancar si está instalado) ---
+# No basta Get-Command: suele quedar instalado por-usuario (AppData de otro
+# usuario) fuera del PATH de esta sesión. Se busca el exe en rutas conocidas.
 Write-Host "`n[4/5] Ollama ..." -ForegroundColor Yellow
-if (Get-Command ollama -ErrorAction SilentlyContinue) {
+$ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue)
+if (-not $ollamaExe) {
+  $candidatos = @("C:\Program Files\Ollama\ollama.exe")
+  if ($env:LOCALAPPDATA) { $candidatos += Join-Path $env:LOCALAPPDATA "Programs\Ollama\ollama.exe" }
+  $candidatos += Get-ChildItem "C:\Users\*\AppData\Local\Programs\Ollama\ollama.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
+  $ollamaExe = $candidatos | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+}
+if ($ollamaExe) {
+  Write-Host "Ollama en: $ollamaExe"
   $apiOk = $false
   try { Invoke-WebRequest -Uri "http://localhost:11434/" -TimeoutSec 4 -UseBasicParsing | Out-Null; $apiOk = $true } catch {}
   if (-not $apiOk) {
     Write-Host "Arrancando ollama serve ..."
-    Start-Process -FilePath "ollama" -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
-    Start-Sleep 5
+    Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
+    Start-Sleep 6
   }
   try { Invoke-WebRequest -Uri "http://localhost:11434/" -TimeoutSec 4 -UseBasicParsing | Out-Null; Write-Host "Ollama OK." -ForegroundColor Green }
   catch { Write-Host "Ollama instalado pero sin responder (revisa manualmente)." -ForegroundColor Yellow }
+  $nmod = 0
+  try { $nmod = ((& $ollamaExe list 2>$null | Select-Object -Skip 1 | Where-Object { $_.Trim() }) | Measure-Object).Count } catch {}
+  Write-Host "Modelos Ollama: $nmod"
 } else { Write-Host "Ollama no instalado (opcional)." -ForegroundColor DarkGray }
 
 # --- 4. servicios web según rol ---

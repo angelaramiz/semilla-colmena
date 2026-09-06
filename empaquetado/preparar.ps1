@@ -34,13 +34,33 @@ if (-not $isAdmin) {
 Write-Host "`n===== PREPARAR ÁRBOL (v3 archivos sueltos) =====" -ForegroundColor Cyan
 
 Write-Host "`n[1/4] OpenSSH Server ..." -ForegroundColor Yellow
-try {
-  $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*" -ErrorAction Stop | Select-Object -First 1
-  if ($cap.State -ne "Installed") {
-    Write-Host "Instalando OpenSSH Server (puede tardar 1-2 min) ..."
-    Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
-  } else { Write-Host "OpenSSH Server ya instalado." }
-} catch { Write-Host "AVISO no se pudo instalar OpenSSH: $_" -ForegroundColor Red }
+$sshdPresent = [bool](Get-Service sshd -ErrorAction SilentlyContinue) -or [bool](Get-Command sshd -ErrorAction SilentlyContinue)
+if (-not $sshdPresent) {
+  Write-Host "Intentando vía Windows Capability (usa Windows Update, puede tardar) ..."
+  try {
+    $cap = Get-WindowsCapability -Online -Name "OpenSSH.Server*" -ErrorAction Stop | Select-Object -First 1
+    if ($cap.State -ne "Installed") {
+      Write-Host "Instalando OpenSSH Server (puede tardar unos minutos; Ctrl+C para saltar al método directo) ..."
+      Add-WindowsCapability -Online -Name $cap.Name -ErrorAction Stop | Out-Null
+    } else { Write-Host "OpenSSH Server ya instalado (capability)." }
+  } catch { Write-Host "Capability no funcionó: $_" -ForegroundColor Yellow }
+  $sshdPresent = [bool](Get-Service sshd -ErrorAction SilentlyContinue) -or [bool](Get-Command sshd -ErrorAction SilentlyContinue)
+}
+if (-not $sshdPresent) {
+  Write-Host "Instalando OpenSSH desde GitHub (método directo, sin Windows Update) ..."
+  try {
+    $z = "$env:TEMP\OpenSSH-Win64.zip"
+    Invoke-WebRequest -Uri "https://github.com/PowerShell/Win32-OpenSSH/releases/latest/download/OpenSSH-Win64.zip" -OutFile $z -UseBasicParsing -ErrorAction Stop
+    if (Test-Path "C:\Program Files\OpenSSH") { Remove-Item "C:\Program Files\OpenSSH" -Recurse -Force -ErrorAction SilentlyContinue }
+    Expand-Archive $z "C:\Program Files\OpenSSH" -Force -ErrorAction Stop
+    # el zip puede traer subcarpeta OpenSSH-Win64; aplanar si hace falta
+    if ((Test-Path "C:\Program Files\OpenSSH\OpenSSH-Win64\install-sshd.ps1") -and (-not (Test-Path "C:\Program Files\OpenSSH\install-sshd.ps1"))) {
+      Get-ChildItem "C:\Program Files\OpenSSH\OpenSSH-Win64" | Move-Item -Destination "C:\Program Files\OpenSSH" -Force
+    }
+    powershell -NoProfile -ExecutionPolicy Bypass -File "C:\Program Files\OpenSSH\install-sshd.ps1" | Out-Null
+    Write-Host "OpenSSH instalado (método directo)."
+  } catch { Write-Host "AVISO no se pudo instalar OpenSSH: $_" -ForegroundColor Red }
+}
 try {
   Start-Service sshd -ErrorAction Stop
   Set-Service -Name sshd -StartupType Automatic -ErrorAction Stop

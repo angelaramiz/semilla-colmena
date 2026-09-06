@@ -16,6 +16,7 @@ semillero/heredado.env
 
 # Semilla empaquetada (.exe contiene credenciales; se genera localmente)
 semilla-*.exe
+preparar-*.exe
 
 # Bases de datos locales (contienen usuarios/hashes, aprobaciones, inventario)
 *.db

@@ -42,6 +42,15 @@
     <input id="token" placeholder="X-Comandante-Token (si está definido)" style="flex:1;max-width:320px">
   </div>
 
+  <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <b>🛟 Salud de sesión</b>
+      <button class="btn sm ghost" onclick="salud()">Verificar</button>
+      <button class="btn sm danger" onclick="reinicioSeguro()" style="margin-left:auto">⏻ Preparar reinicio</button>
+    </div>
+    <div id="salud" style="font-size:13px;color:var(--mut)">Sin verificar.</div>
+  </div>
+
   <form id="reg-form">
     <input id="r-id" placeholder="arbol_id" required>
     <input id="r-host" placeholder="host (tailnet.ts.net / IP)" required style="flex:2">
@@ -107,6 +116,29 @@ async function accion(id, tipo){
     const j = await req(`/api/arboles/${id}/${tipo}`, {method:'POST', body: JSON.stringify(tipo==='upgrade'?{rama:'main'}:{})});
     log(j);
     cargar();
+  }catch(e){ log('Error: '+e.message); }
+}
+
+async function salud(){
+  const el = document.getElementById('salud');
+  el.textContent = 'Verificando…';
+  try{
+    const s = await req('/api/salud_sesion');
+    const dot = s.conflicto_cuentas ? '🔴' : '🟢';
+    const tareas = Object.entries(s.tareas||{}).map(([k,v])=>`${k}:${v?'sí':'no'}`).join(' · ') || 'n/a';
+    const desc = (s.descargas_medias||[]).map(d=>`${d.archivo} (${d.mb} MB)`).join(', ') || 'ninguna';
+    el.innerHTML = `${dot} Panel como <b>${s.usuario_panel}</b> · Tailscale: ${s.tailscale.disponible?(s.tailscale.controlado?'controlado por esta sesión':'de <b>'+s.tailscale.dueno+'</b>'):'no disponible'}`
+      + `<br>Tareas: ${tareas} · Disco libre: ${s.disco?s.disco.libre_gb+' GB':'?'} · Ollama: ${s.ollama?'OK':'apagado'}`
+      + `<br>Descargas a medias: ${desc}`
+      + (s.conflicto_cuentas?'<br>⚠️ <b>No emitas up/login de Tailscale desde aquí</b> (lo gestiona '+s.tailscale.dueno+'). Para reiniciar usa “Preparar reinicio”.':'');
+  }catch(e){ el.textContent = 'Error: '+e.message; }
+}
+
+async function reinicioSeguro(){
+  if(!confirm('¿Detener descargas y ArbolWeb para un reinicio limpio? (Este panel sigue activo)')) return;
+  try{
+    const j = await req('/api/reinicio_seguro', {method:'POST', body:'{}'});
+    log(j);
   }catch(e){ log('Error: '+e.message); }
 }
 

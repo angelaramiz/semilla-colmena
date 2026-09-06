@@ -14,6 +14,10 @@ Auth: si se define COMANDANTE_WEB_TOKEN, todas las rutas API requieren el header
 import os
 import sys
 import json
+import shutil
+import subprocess
+import urllib.request
+import getpass
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
@@ -114,6 +118,144 @@ def api_upgrade(arbol_id: str, body: UpgradeBody, x_comandante_token: str | None
 def api_archivo(arbol_id: str, body: ArchivoBody, x_comandante_token: str | None = Header(default=None)):
     _authorize(x_comandante_token)
     return json.loads(propagar_archivo(arbol_id, body.origen_local, body.destino_remoto))
+
+
+# --- Salud de sesión y reinicio seguro --------------------------------------
+# Evita que un reinicio con descargas a medias o con Tailscale gestionado por
+# otro usuario deje el árbol en conflicto (perfil/servicios). Solo lectura y
+# parada de tareas secundarias; NUNCA detiene este propio panel.
+
+_TAREAS_ARBOL = ["ArbolWeb", "ComandanteWeb", "OllamaServe", "OllamaBg"]
+
+
+def _usuario_panel() -> str:
+    try:
+        return os.getenv("USERNAME") or os.getenv("USER") or getpass.getuser()
+    except Exception:
+        return "?"
+
+
+def _tailscale_info() -> dict:
+    """Quién controla el demonio Tailscale visible desde esta sesión."""
+    import shutil as _sh
+    if not _sh.which("tailscale"):
+        return {"disponible": False, "controlado": False, "dueno": "", "detalle": "tailscale no en PATH"}
+    try:
+        r = subprocess.run(["tailscale", "status"], capture_output=True, text=True, timeout=10)
+        txt = (r.stdout or "") + (r.stderr or "")
+        import re as _re
+        m = _re.search(r"already in use by ([^,\)\n]+)", txt)
+        if m:
+            return {"disponible": True, "controlado": False, "dueno": m.group(1).strip(),
+                    "detalle": "demonio gestionado por otro usuario; no emitir up/login desde aquí"}
+        if "100." in (r.stdout or ""):
+            return {"disponible": True, "controlado": True, "dueno": _usuario_panel(),
+                    "detalle": "conectado y controlable"}
+        return {"disponible": True, "controlado": False, "dueno": "",
+                "detalle": (txt.strip()[:200] or "sin estado")}
+    except Exception as e:
+        return {"disponible": False, "controlado": False, "dueno": "", "detalle": str(e)[:150]}
+
+
+def _tareas_estado() -> dict:
+    """Qué tareas programadas del árbol existen (Windows)."""
+    info = {}
+    if sys.platform != "win32":
+        return info
+    for t in _TAREAS_ARBOL:
+        try:
+            r = subprocess.run(["schtasks", "/Query", "/TN", t],
+                               capture_output=True, timeout=10)
+            info[t] = (r.returncode == 0)
+        except Exception:
+            info[t] = False
+    return info
+
+
+def _descargas_medias() -> list:
+    """Instaladores parciales en TEMP (riesgo si se reinicia a medias)."""
+    out = []
+    tmp = os.getenv("TEMP") or os.getenv("TMP") or "/tmp"
+    try:
+        import glob as _glob
+        for f in _glob.glob(os.path.join(tmp, "OllamaSetup*.exe")):
+            try:
+                sz = os.path.getsize(f)
+                if sz > 1024 * 1024:
+                    out.append({"archivo": os.path.basename(f),
+                                "mb": round(sz / (1024 * 1024), 1)})
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return out
+
+
+@app.get("/api/salud_sesion")
+def api_salud_sesion(x_comandante_token: str | None = Header(default=None)):
+    """Salud de sesión: usuario del panel, dueño de Tailscale, tareas, disco, Ollama."""
+    _authorize(x_comandante_token)
+    yo = _usuario_panel()
+    ts = _tailscale_info()
+    conflicto = bool(ts.get("dueno")) and ts["dueno"].lower() not in (yo.lower(), "")
+    disco = None
+    try:
+        d = shutil.disk_usage(HERE)
+        disco = {"libre_gb": round(d.free / (1024 ** 3), 1)}
+    except Exception:
+        pass
+    ollama_ok = False
+    try:
+        with urllib.request.urlopen("http://localhost:11434/", timeout=3) as r:
+            ollama_ok = (r.status == 200)
+    except Exception:
+        pass
+    return {
+        "usuario_panel": yo,
+        "tailscale": ts,
+        "conflicto_cuentas": conflicto,
+        "tareas": _tareas_estado(),
+        "descargas_medias": _descargas_medias(),
+        "disco": disco,
+        "ollama": ollama_ok,
+    }
+
+
+@app.post("/api/reinicio_seguro")
+def api_reinicio_seguro(x_comandante_token: str | None = Header(default=None)):
+    """Detiene descargas y servicios secundarios para un reinicio limpio.
+
+    Detiene la tarea OllamaBg y el servicio ArbolWeb (:8000). NO toca este
+    panel (ComandanteWeb) para no cortar la propia respuesta.
+    """
+    _authorize(x_comandante_token)
+    acciones = []
+    if sys.platform == "win32":
+        for t in ("OllamaBg", "ArbolWeb"):
+            try:
+                r = subprocess.run(["schtasks", "/End", "/TN", t],
+                                   capture_output=True, timeout=15)
+                acciones.append(f"tarea {t}: detenida" if r.returncode == 0 else f"tarea {t}: sin cambios")
+            except Exception as e:
+                acciones.append(f"tarea {t}: error {str(e)[:80]}")
+        # Matar solo el worker de web_server (nunca este proceso ni comandante_web)
+        try:
+            import psutil as _ps
+            yo = os.getpid()
+            for p in _ps.process_iter(["pid", "cmdline"]):
+                try:
+                    cmd = " ".join(p.info.get("cmdline") or [])
+                    if p.info["pid"] != yo and "web_server" in cmd and "uvicorn" in cmd:
+                        p.terminate()
+                        acciones.append(f"proceso ArbolWeb pid {p.info['pid']}: terminado")
+                except Exception:
+                    pass
+        except Exception as e:
+            acciones.append(f"procesos: {str(e)[:80]}")
+    else:
+        acciones.append("plataforma no Windows: sin acciones")
+    acciones.append("Listo: puedes reiniciar la máquina de forma segura.")
+    return {"ok": True, "acciones": acciones}
 
 
 # --- Frontend -------------------------------------------------------------

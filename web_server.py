@@ -4,6 +4,11 @@ import sys
 import json
 import uuid
 import asyncio
+import time
+import platform
+import shutil
+import subprocess
+import glob
 from typing import Generator, Optional, List
 from fastapi import FastAPI, Query, HTTPException, Depends, status
 from fastapi.responses import StreamingResponse, FileResponse
@@ -22,6 +27,13 @@ from auth import (
     get_admin_user,
     get_directora_user,
 )
+
+try:
+    import psutil as _psutil
+except Exception:
+    _psutil = None
+
+_ARBOL_BOOT = time.time()
 
 # Asegurar encoding UTF-8 en Windows para subprocesses
 if sys.platform == "win32":
@@ -287,11 +299,202 @@ def audit_stream(
 
 @app.get("/api/reports/{report_id}")
 def obtener_reporte(report_id: str, current_user: User = Depends(get_approved_user)):
-    """Permite obtener un reporte previamente guardado por su ID. Protegido para aprobados."""
+    """Permite obtener un reporte previamente generado por su ID. Protegido para aprobados."""
     file_path = os.path.join(WEB_REPORTES_DIR, f"reporte_{report_id}.json")
     if not os.path.exists(file_path):
         raise HTTPException(status_code=404, detail="Reporte no encontrado")
     return FileResponse(file_path)
+
+@app.get("/api/reports/{report_id}")
+def obtener_reporte(report_id: str, current_user: User = Depends(get_approved_user)):
+    """Permite obtener un reporte previamente generado por su ID. Protegido para aprobados."""
+    file_path = os.path.join(WEB_REPORTES_DIR, f"reporte_{report_id}.json")
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Reporte no encontrado")
+    return FileResponse(file_path)
+
+# --- PANEL DEL ÁRBOL (localhost): identidad, métricas y tareas --------------
+# Endpoints abiertos solo para la máquina local (el propio árbol). No requieren
+# auth: el panel vive en localhost y muestra el estado del sistema.
+
+def _mem_windows():
+    """RAM por ctypes (funciona sin psutil). Retorna (total_mb, disp_mb) o None."""
+    try:
+        import ctypes
+        class MS(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+        ms = MS(); ms.dwLength = ctypes.sizeof(MS)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms))
+        return ms.ullTotalPhys // (1024 * 1024), ms.ullAvailPhys // (1024 * 1024)
+    except Exception:
+        return None
+
+_cpu_prev = {"idle": None, "kernel": None, "user": None, "t": None}
+
+def _cpu_windows_delta():
+    """CPU % por delta de GetSystemTimes (sin psutil). Primera llamada retorna None."""
+    try:
+        import ctypes
+        class FT(ctypes.Structure):
+            _fields_ = [("dwLowDateTime", ctypes.c_ulong), ("dwHighDateTime", ctypes.c_ulong)]
+        def _to_int(ft):
+            return (ft.dwHighDateTime << 32) | ft.dwLowDateTime
+        idle, kernel, user = FT(), FT(), FT()
+        ctypes.windll.kernel32.GetSystemTimes(ctypes.byref(idle), ctypes.byref(kernel), ctypes.byref(user))
+        now = time.time()
+        i, k, u = _to_int(idle), _to_int(kernel), _to_int(user)
+        p = _cpu_prev
+        if p["idle"] is None:
+            p.update(idle=i, kernel=k, user=u, t=now)
+            return None
+        total_d = (k - p["kernel"]) + (u - p["user"])
+        idle_d = i - p["idle"]
+        p.update(idle=i, kernel=k, user=u, t=now)
+        if total_d <= 0:
+            return 0.0
+        return round((1.0 - idle_d / total_d) * 100.0, 1)
+    except Exception:
+        return None
+
+
+@app.get("/api/arbol/info")
+def arbol_info():
+    """Identidad del árbol: id, rol, uptime, versión git, plataforma."""
+    info = {
+        "arbol_id": os.getenv("ARBOL_ID", "local"),
+        "arbol_rol": os.getenv("ARBOL_ROL", ""),
+        "arbol_nombre": os.getenv("ARBOL_NOMBRE", ""),
+        "uptime_s": int(time.time() - _ARBOL_BOOT),
+        "plataforma": platform.system() + " " + platform.release(),
+        "hostname": platform.node(),
+        "python": platform.python_version(),
+        "cpu_nucleos": os.cpu_count() or 0,
+        "git_rama": "", "git_head": "",
+    }
+    try:
+        r = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                           capture_output=True, text=True, timeout=5, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if r.returncode == 0:
+            info["git_rama"] = r.stdout.strip()
+        r = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                           capture_output=True, text=True, timeout=5, cwd=os.path.dirname(os.path.abspath(__file__)))
+        if r.returncode == 0:
+            info["git_head"] = r.stdout.strip()
+    except Exception:
+        pass
+    return info
+
+
+@app.get("/api/arbol/metricas")
+def arbol_metricas():
+    """Métricas del sistema: CPU %, RAM, disco. Usa psutil si existe."""
+    cpu, ram_pct, ram_total, ram_disp = None, None, None, None
+    if _psutil:
+        try:
+            cpu = round(_psutil.cpu_percent(interval=0.4), 1)
+            m = _psutil.virtual_memory()
+            ram_pct, ram_total, ram_disp = round(m.percent, 1), m.total // (1024*1024), m.available // (1024*1024)
+        except Exception:
+            pass
+    else:
+        cpu = _cpu_windows_delta()
+        mem = _mem_windows() if sys.platform == "win32" else None
+        if mem:
+            ram_total, ram_disp = mem
+            ram_pct = round((ram_total - ram_disp) / ram_total * 100.0, 1) if ram_total else None
+        elif sys.platform != "win32":
+            try:
+                pagesz, phys, avail = os.sysconf("SC_PAGE_SIZE"), os.sysconf("SC_PHYS_PAGES"), os.sysconf("SC_AVPHYS_PAGES")
+                ram_total, ram_disp = phys * pagesz // (1024*1024), avail * pagesz // (1024*1024)
+                ram_pct = round((ram_total - ram_disp) / ram_total * 100.0, 1) if ram_total else None
+            except Exception:
+                pass
+    try:
+        d = shutil.disk_usage(os.path.abspath("."))
+        disco = {"total_gb": round(d.total / (1024**3), 1), "usado_gb": round(d.used / (1024**3), 1),
+                 "libre_gb": round(d.free / (1024**3), 1),
+                 "pct": round(d.used / d.total * 100.0, 1) if d.total else None}
+    except Exception:
+        disco = None
+    return {"cpu_pct": cpu, "cpu_nucleos": os.cpu_count() or 0,
+            "ram_pct": ram_pct, "ram_total_mb": ram_total, "ram_disp_mb": ram_disp,
+            "disco": disco, "uptime_s": int(time.time() - _ARBOL_BOOT),
+            "psutil": bool(_psutil)}
+
+
+@app.get("/api/arbol/modelos")
+def arbol_modelos():
+    """Modelos Ollama disponibles en este árbol."""
+    modelos = []
+    try:
+        import urllib.request
+        with urllib.request.urlopen("http://localhost:11434/api/tags", timeout=4) as r:
+            data = json.loads(r.read())
+            for m in data.get("models", []):
+                modelos.append({"nombre": m.get("name", "?"),
+                                "tamano_gb": round((m.get("size") or 0) / (1024**3), 2),
+                                "modificado": (m.get("modified_at") or "")[:10]})
+    except Exception:
+        try:
+            r = subprocess.run(["ollama", "list"], capture_output=True, text=True, timeout=10)
+            for ln in (r.stdout or "").splitlines()[1:]:
+                parts = ln.split()
+                if parts:
+                    modelos.append({"nombre": parts[0], "tamano_gb": None, "modificado": ""})
+        except Exception:
+            pass
+    return {"modelos": modelos, "ollama_url": os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")}
+
+
+@app.get("/api/arbol/tareas")
+def arbol_tareas(limite: int = Query(25, ge=1, le=100)):
+    """Lista unificada de tareas del árbol: gates (aprobaciones), reportes y procesos."""
+    tareas = []
+    arbol_id = os.getenv("ARBOL_ID", "local")
+    # Gates: aprobaciones pendientes / historial
+    try:
+        for a in listar_aprobaciones(arbol_id, None)[:limite]:
+            estado = {"pendiente": "pendiente", "aprobada": "completada", "rechazada": "rechazada"}.get(a.get("estado"), a.get("estado", "?"))
+            tareas.append({"id": f"gate-{a.get('id')}", "tipo": "gate", "titulo": f"{a.get('tipo','tarea')}: {(a.get('detalle') or '')[:90]}",
+                           "estado": estado, "detalle": a.get("feedback") or "", "fecha": a.get("created_at")})
+    except Exception:
+        pass
+    # Reportes generados = trabajo completado
+    try:
+        archivos = sorted(glob.glob(os.path.join(WEB_REPORTES_DIR, "reporte_*.json")),
+                          key=lambda f: os.path.getmtime(f), reverse=True)[:limite]
+        for f in archivos:
+            titulo, negocio = os.path.basename(f), ""
+            try:
+                with open(f, "r", encoding="utf-8") as fh:
+                    rep = json.load(fh)
+                    negocio = rep.get("negocio") or rep.get("business") or ""
+                    titulo = f"Auditoría: {negocio or os.path.basename(f)}"
+            except Exception:
+                pass
+            tareas.append({"id": f"rep-{titulo[-40:]}", "tipo": "auditoria", "titulo": titulo,
+                           "estado": "completada", "detalle": negocio,
+                           "fecha": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(f)))})
+    except Exception:
+        pass
+    # Procesos vivos relevantes = trabajo en curso
+    try:
+        procs = []
+        if _psutil:
+            for p in _psutil.process_iter(["pid", "name", "cpu_percent"]):
+                n = (p.info.get("name") or "").lower()
+                if any(k in n for k in ("uvicorn", "ollama", "python", "crew", "tailscale")):
+                    procs.append({"id": f"proc-{p.info['pid']}", "tipo": "proceso",
+                                  "titulo": f"{p.info.get('name')} (pid {p.info['pid']})",
+                                  "estado": "en_curso", "detalle": "", "fecha": None})
+        tareas.extend(procs[:10])
+    except Exception:
+        pass
+    return {"arbol_id": arbol_id, "tareas": tareas[:limite], "total": len(tareas)}
 
 # Servir frontend estático. Debe montarse al final para no interferir con las APIs.
 app.mount("/", StaticFiles(directory="static", html=True), name="static")

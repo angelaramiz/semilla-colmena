@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panel del Árbol — Estado y Tareas</title>
+<style>
+  :root{--bg:#0d0f13;--card:#161a21;--line:#262b36;--txt:#e8eaf0;--mut:#8a93a5;--ok:#2ecc71;--warn:#f39c12;--red:#e74c3c;--blue:#3498db;--accent:#16731b;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--txt)}
+  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0}
+  .rol{font-size:11px;background:#1a3a2a;color:#7dffa8;padding:3px 10px;border-radius:20px}
+  .uptime{font-size:12px;color:var(--mut);margin-left:auto}
+  main{padding:24px;max-width:1100px;margin:0 auto}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-bottom:16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
+  .card h3{margin:0 0 10px;font-size:14px;color:var(--mut)}
+  .bar-bg{background:#0a0c10;border-radius:6px;height:14px;overflow:hidden;margin:6px 0}
+  .bar-fill{height:100%;border-radius:6px;transition:width .5s}
+  .fill-ok{background:var(--ok)} .fill-warn{background:var(--warn)} .fill-bad{background:var(--red)}
+  .big{font-size:26px;font-weight:700}
+  .small{font-size:12px;color:var(--mut)}
+  .badge{font-size:11px;padding:2px 8px;border-radius:12px;font-weight:600}
+  .b-ok{background:#1a3a2a;color:var(--ok)} .b-run{background:#1a2a3a;color:var(--blue)}
+  .b-wait{background:#3a3a1a;color:var(--warn)} .b-no{background:#3a1a1a;color:var(--red)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:10px 12px;background:#1a1e27;color:var(--mut);font-weight:600;border-bottom:2px solid var(--line)}
+  td{padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+  tr:hover td{background:#1a1e27}
+  .btn{background:var(--accent);color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+  .btn:hover{filter:brightness(1.15)}
+  .models{display:flex;gap:8px;flex-wrap:wrap}
+  .model{background:#0a0c10;border:1px solid var(--line);border-radius:8px;padding:8px 12px;font-size:13px}
+  .model code{color:var(--ok)}
+  .empty{color:var(--mut);font-style:italic;text-align:center;padding:16px}
+  .refresh{display:flex;justify-content:space-between;align-items:center;margin:16px 0 8px}
+  .last{font-size:11px;color:var(--mut)}
+  a.top{color:var(--mut);font-size:12px;text-decoration:none}
+  a.top:hover{color:var(--txt)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌳 Panel del Árbol</h1>
+  <span class="rol" id="h-rol">…</span>
+  <span class="uptime" id="h-up">…</span>
+  <a class="top" href="/">← Auditor</a>
+</header>
+<main>
+  <div class="grid">
+    <div class="card">
+      <h3>CPU</h3>
+      <div class="big" id="m-cpu">—</div>
+      <div class="bar-bg"><div class="bar-fill fill-ok" id="m-cpu-bar" style="width:0%"></div></div>
+      <div class="small" id="m-cpu-sub">…</div>
+    </div>
+    <div class="card">
+      <h3>RAM</h3>
+      <div class="big" id="m-ram">—</div>
+      <div class="bar-bg"><div class="bar-fill fill-ok" id="m-ram-bar" style="width:0%"></div></div>
+      <div class="small" id="m-ram-sub">…</div>
+    </div>
+    <div class="card">
+      <h3>Disco</h3>
+      <div class="big" id="m-disk">—</div>
+      <div class="bar-bg"><div class="bar-fill fill-ok" id="m-disk-bar" style="width:0%"></div></div>
+      <div class="small" id="m-disk-sub">…</div>
+    </div>
+    <div class="card">
+      <h3>Este árbol</h3>
+      <div class="small" id="m-sys">…</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <h3>Modelos Ollama</h3>
+    <div class="models" id="models"><span class="small">Cargando…</span></div>
+  </div>
+
+  <div class="refresh">
+    <h3 style="margin:0;color:var(--mut);font-size:15px">📋 Tareas del sistema</h3>
+    <span><button class="btn" onclick="cargarTodo()">↻ Actualizar</button>
+    <label class="small"><input type="checkbox" id="auto" checked onchange="toggleAuto()"> Auto (10s)</label></span>
+  </div>
+  <div class="card">
+    <div id="tasks"><div class="empty">Cargando tareas…</div></div>
+    <div class="last" id="last">—</div>
+  </div>
+</main>
+<script>
+async function get(url){ const r = await fetch(url); if(!r.ok) throw new Error(r.status); return r.json(); }
+function fillBar(id, pct){
+  const el = document.getElementById(id);
+  el.style.width = (pct ?? 0) + '%';
+  el.className = 'bar-fill ' + (pct == null ? '' : pct < 60 ? 'fill-ok' : pct < 85 ? 'fill-warn' : 'fill-bad');
+}
+function fmtUp(s){ const h=Math.floor(s/3600),m=Math.floor(s%3600/60); return h>0?`${h}h ${m}m`:`${m}m`; }
+
+async function cargarTodo(){
+  try{
+    const [info, met, mods] = await Promise.all([get('/api/arbol/info'), get('/api/arbol/metricas'), get('/api/arbol/modelos')]);
+    document.getElementById('h-rol').textContent = `${info.arbol_id} · ${info.arbol_rol || 'árbol'}`;
+    document.getElementById('h-up').textContent = `⏱ ${fmtUp(info.uptime_s)} · git ${info.git_rama || '?'}@${info.git_head || '?'}`;
+    const cp = met.cpu_pct;
+    document.getElementById('m-cpu').textContent = cp == null ? 'n/d' : cp + '%';
+    fillBar('m-cpu-bar', cp);
+    document.getElementById('m-cpu-sub').textContent = `${met.cpu_nucleos} núcleos${met.psutil ? '' : ' · sin psutil'}`;
+    const rp = met.ram_pct;
+    document.getElementById('m-ram').textContent = rp == null ? 'n/d' : rp + '%';
+    fillBar('m-ram-bar', rp);
+    document.getElementById('m-ram-sub').textContent = met.ram_total_mb ? `Total ${(met.ram_total_mb/1024).toFixed(1)} GB · libre ${(met.ram_disp_mb/1024).toFixed(1)} GB` : '…';
+    if (met.disco){
+      document.getElementById('m-disk').textContent = met.disco.pct + '%';
+      fillBar('m-disk-bar', met.disco.pct);
+      document.getElementById('m-disk-sub').textContent = `Usado ${met.disco.usado_gb} GB de ${met.disco.total_gb} GB`;
+    }
+    document.getElementById('m-sys').innerHTML = `${info.hostname}<br>${info.plataforma}<br>Python ${info.python}`;
+    document.getElementById('models').innerHTML = mods.modelos.length
+      ? mods.modelos.map(m => `<span class="model"><code>${m.nombre}</code> ${m.tamano_gb ? m.tamano_gb + ' GB' : ''}</span>`).join('')
+      : '<span class="small">Ollama no disponible</span>';
+  }catch(e){ console.warn('metrics', e); }
+
+  const c = document.getElementById('tasks');
+  try{
+    const t = await get('/api/arbol/tareas?limite=25');
+    if (!t.tareas.length){ c.innerHTML = '<div class="empty">Sin tareas registradas todavía.</div>'; return; }
+    const cls = {pendiente:'b-wait', en_curso:'b-run', completada:'b-ok', aprobada:'b-ok', rechazada:'b-no'};
+    const lbl = {pendiente:'PENDIENTE', en_curso:'EN CURSO', completada:'COMPLETADA', aprobada:'APROBADA', rechazada:'RECHAZADA'};
+    let h = '<table><thead><tr><th>Estado</th><th>Tarea</th><th>Tipo</th><th>Fecha</th></tr></thead><tbody>';
+    for (const x of t.tareas){
+      h += `<tr><td><span class="badge ${cls[x.estado]||'b-wait'}">${lbl[x.estado]||x.estado}</span></td><td><strong>${esc(x.titulo)}</strong>${x.detalle?`<br><small style="color:var(--mut)">${esc(x.detalle)}</small>`:''}</td><td>${x.tipo}</td><td class="small">${x.fecha||'—'}</td></tr>`;
+    }
+    document.getElementById('tasks').innerHTML = h + '</tbody></table>';
+    document.getElementById('last').textContent = 'Actualizado: ' + new Date().toLocaleTimeString();
+  }catch(e){ c.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+function esc(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let iv = null;
+function toggleAuto(){
+  if (document.getElementById('auto').checked) iv = setInterval(cargarTodo, 10000);
+  else { clearInterval(iv); iv = null; }
+}
+toggleAuto(); cargarTodo();
+</script>
+</body>
+</html>

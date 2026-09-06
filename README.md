@@ -1,182 +1,99 @@
-# 🔍 Auditor de Huella Digital - Agencia de Marketing MCP
+# 🌱 Semilla Colmena — Agencia de Marketing Autónoma (Mente Colmena)
 
-Auditor autónomo de presencia digital para pequeños negocios locales en México.
+Sistema multi-agente autónomo (CrewAI + FastMCP + Ollama/OpenRouter) organizado como
+**colmena**: una semilla germina árboles (instancias) que operan 24/7 conectados por
+red privada Tailscale, con paneles web por rol y registro central en Supabase.
 
-## 🎯 Características
+## 🏗️ Arquitectura (resumen)
 
-- ✅ **Búsqueda en Google Maps**: Extrae datos públicos de negocio (rating, reseñas, dirección, teléfono)
-- ✅ **Verificación de redes sociales**: Instagram y Facebook
-- ✅ **Score de Madurez Digital**: Calificación 0-100 basada en criterios de marketing
-- ✅ **Análisis inteligente con IA**: CrewAI con Llama 3.1 local o OpenAI
-- ✅ **Interfaz gráfica**: GUI con CustomTkinter para facilidad de uso
-- ✅ **Modo CLI**: Para automatización y scripts
-- ✅ **Procesamiento por lote**: Audita múltiples negocios en una sesión
+| Capa | Código | Función |
+|------|--------|---------|
+| Semilla | `core/`, `sembrar.ps1/.sh` | Enrutador LLM, clasificador, manifiesto, bootstrap de árboles |
+| Tronco | `orquestador/` | Orquestador + pipeline de campañas |
+| Ramas obreras | `contenido/`, `redes/`, `analitica/`, `investigacion/`, `atencion_cliente/`, `planeacion/`, `auditoria/` (`primer_contacto/`) | Agentes CrewAI + servidores MCP |
+| Micelio | `micelio/` | Mantenimiento (salud/reparar, con autorización del Conservante) |
+| Red | `comunicacion/` + Tailscale/SSH | Comandante controla árboles hijos |
+| Paneles | `:8000` árbol · `:8001` comandante · `:8002` conservante | FastAPI/Uvicorn |
 
-## 🚀 Instalación
+Modelos: **Ollama local** (rutina — `qwen3:4b`, `qwen2.5:1.5b`) + **OpenRouter** (estrategia,
+con rotación y fallback). Búsqueda de código: **CodeGraph** (`.codegraph/`).
 
-### Prerequisites
-- **Python 3.11+**
-- **uv** (gestor de dependencias): https://docs.astral.sh/uv/getting-started/
-- **Ollama** (para LLM local) o API key de OpenAI
+## 🌳 Árboles desplegados
 
-### Setup
+| Árbol | Máquina | Rol | Paneles |
+|-------|---------|-----|---------|
+| `conservante_principal` | Esta PC | conservante | `:8002` Conservante · `:8000` Árbol |
+| `arbol_obrero_01` | yazminlap `100.93.118.23` | obrero | `:8000` (+ `/arbol.html`) |
+| `cmd_01` | ruti `100.114.102.85` | comandante | `:8001` Comandante · `:8000` |
 
-```bash
-# 1. Clonar/descargar el proyecto
-cd agen_mrk
+Registro vivo: tabla Supabase `arboles_remotos` (visible en el Conservante con estado EN LÍNEA/OFFLINE).
 
-# 2. Instalar dependencias
-uv sync
+## 🚀 Inicio rápido
 
-# 3. Configurar variables de entorno
-cp .env.example .env   # Si existe
-# O crear .env manualmente:
-```
-
-### Archivo `.env`
-
-```env
-# === API Keys ===
-GOOGLE_API_KEY=AIzaSy...          # Google Places API (opcional, fallback a SerpAPI)
-SERPAPI_KEY=...                    # SerpAPI (si usas como proveedor)
-OPENAI_API_KEY=sk-...              # Solo si usas OpenAI en lugar de Ollama
-
-# === LLM Local (Ollama) ===
-USE_LOCAL_LLM=true
-LOCAL_LLM_BASE_URL=http://localhost:11434/v1
-LOCAL_LLM_MODEL=llama3.1:8b        # O qwen2.5:7b, mistral, etc.
-
-# === Proveedor de datos ===
-DATA_PROVIDER=serpapi              # serpapi, google, o mock
-```
-
-## 📖 Uso
-
-### Modo GUI (Recomendado para usuarios finales)
+**En cualquier árbol Windows:** doble clic a **`Levantar Colmena.bat`** (Escritorio) —
+actualiza código (`fetch+reset`), sincroniza dependencias (`uv sync`), verifica
+Tailscale/Ollama, arranca servicios 24/7 y abre el panel. También corre solo al
+iniciar sesión (acceso directo en `Startup/`).
 
 ```bash
-uv run python main.py
+# Alternativas por terminal
+uv run python main.py --orquestador "instrucción"    # Tronco
+uv run python main.py --campana "objetivo"           # pipeline de campaña
+uv run python main.py --rama <nombre> --inputs '{}'  # rama individual
+uv run python main.py --micelio                      # mantenimiento
+uv run python main.py --clasificar "texto"           # clasificación
+uv run python main.py --arboles                      # inventario
+uv sync                                              # dependencias
 ```
 
-Abre una ventana con:
-- **Tab 1**: Auditoría individual (un negocio)
-- **Tab 2**: Auditoría por lote (múltiples negocios desde JSON)
-- **Consola en vivo** con colores y resultados
+**Modos de ejecución** (panel Auditor → *Modo de Ejecución*, o `main.py -m`):
+`local` (Ollama) · `produccion` (cloud) · `obrero` (vía `core/registro_ramas`, LLM local).
 
-### Modo CLI (Para scripts/automatización)
+## 📦 Semillas (ejecutables Windows, solo locales — gitignored)
 
-```bash
-# Auditoría individual con salida en pantalla
-uv run python agente.py -n "Burgers Perronas" -c "Monterrey, Nuevo León"
+| Exe | Germina | Generar con |
+|-----|---------|-------------|
+| `semilla-colmena.exe` | obrero (`arbol_obrero_01`) | `empaquetado/empaquetar.ps1` |
+| `semilla-comandante.exe` | comandante (`cmd_01`) | `empaquetado/empaquetar.ps1 -ArbolId cmd_01 -Rol comandante -Salida semilla-comandante.exe` |
+| `preparar-arbol.exe` | — (prepara máquina: OpenSSH + usuario + firewall + IP) | `empaquetado/empaquetar_preparar.ps1` |
 
-# Guardar reporte en JSON
-uv run python agente.py -n "Dental Smarts" -c "Monterrey, NL" -o reportes/dental.json
+Los `.exe` hornean `semillero/heredado.env` (credenciales reales, gitignored).
+Enviar por Taildrop: `tailscale file cp <exe> <nodo>:` → recibir con
+`tailscale file get ([Environment]::GetFolderPath('Desktop'))`.
 
-# Modo interactivo
-uv run python agente.py -i
-```
+## ⚙️ Variables clave (`.env`, gitignored — ver `.env.example`)
 
-### Auditoría por lote (GUI o CLI)
+`AUTO_OPEN_BROWSER` (abrir panel al arrancar, solo local) ·
+`LEVANTAR_URL` (qué abre *Levantar*; vacío = `:8000`) ·
+`DATABASE_URL` / `SUPABASE_URL` · `TAILSCALE_TOKEN` ·
+`CONSERVANTE_WEB_TOKEN` / `COMANDANTE_WEB_TOKEN` · `JWT_SECRET_KEY`.
 
-**Archivo `clientes.json`**:
-```json
-{
-  "auditorias": [
-    {"negocio": "Burgers Perronas", "ciudad": "Monterrey, Nuevo León"},
-    {"negocio": "Dental Smarts", "ciudad": "Monterrey, NL"},
-    {"negocio": "Café La Esquina", "ciudad": "San Pedro Garza García, NL"}
-  ]
-}
-```
-
-**En GUI**: Selecciona archivo → Ejecutar Lote
-
-## 📊 Resultado
-
-Cada auditoría genera un JSON con:
-
-```json
-{
-  "score": 75,
-  "resumen_ejecutivo": "Negocio bien establecido con buena presencia en Google Maps pero ausente en redes sociales",
-  "hallazgos_criticos": [
-    "Google Maps actualizado con teléfono y horario",
-    "Sin perfil de Instagram",
-    "Sin presencia en Facebook"
-  ],
-  "oportunidades": [
-    "Crear perfil de Instagram enfocado en portfolio de trabajo",
-    "Implementar WhatsApp Business para contacto directo",
-    "Publicar reseñas en Google Maps"
-  ]
-}
-```
-
-## 🔧 Troubleshooting
-
-### Error: "No se puede conectar a Ollama"
-
-Verifica que Ollama esté corriendo:
-```bash
-curl http://localhost:11434/api/tags
-```
-
-Si no funciona, instala Ollama: https://ollama.ai
-
-### Error: "Falta SERPAPI_KEY / GOOGLE_API_KEY"
-
-- **SerpAPI**: Registra en https://serpapi.com (gratis primeras 100 búsquedas)
-- **Google Places API**: Habilita en https://cloud.google.com/console
-
-O usa modo `mock` cambiando `DATA_PROVIDER=mock` en `.env`
-
-### Error: "TaskGroup" o "unhandled errors"
-
-El servidor MCP falló. Soluciones:
-1. Verifica que el archivo `servidor_mcp.py` existe
-2. Reinicia la aplicación
-3. Revisa que todas las excepciones están siendo atrapadas internamente
-
-## 📁 Estructura del Proyecto
+## 📁 Estructura
 
 ```
 agen_mrk/
-├── main.py                 # Punto de entrada (GUI/CLI)
-├── gui.py                  # Interfaz gráfica (CustomTkinter)
-├── agente.py              # Orquestación CrewAI + llamadas MCP
-├── servidor_mcp.py        # Servidor de herramientas MCP
-│
-├── context/               # Contexto del proyecto
-│   ├── context.md         # Arquitectura técnica
-│   └── chat-*.txt         # Notas contextuales
-│
-├── reportes/              # Resultados de auditorías (JSON)
-├── salida/                # Outputs adicionales
-│
-├── .env                   # Configuración (NO subir a git)
-├── .gitignore
-├── pyproject.toml         # Dependencias
-└── README.md              # Este archivo
+├── core/            # semilla: llm_router, clasificador, registro_ramas, manifiesto, auto_open
+├── orquestador/     # tronco + pipeline de campaña
+├── contenido/ redes/ analitica/ investigacion/ atencion_cliente/ planeacion/
+├── primer_contacto/ # rama auditoría (auditor huella digital)
+├── micelio/         # mantenimiento        comunicacion/     # SSH/Tailscale
+├── web_server.py    # panel árbol :8000 (+ /arbol.html: métricas y tareas de estación)
+├── comandante_web.py conservante_web.py     # paneles :8001 / :8002
+├── levantar.ps1     # botón de encendido (actualiza + arranca todo)
+├── sembrar.ps1/.sh  # germinación          empaquetado/      # SFX + preparar
+├── static/          # frontend auditor + arbol.html
+├── db.py auth.py main.py gui.py
+└── .agents/         # protocolo multi-agente Gate (TPM ↔ Dev Jr) + memoria
 ```
 
-## 🔗 Dependencias Principales
+## 📚 Docs
 
-- **crewai**: Orquestación de agentes IA
-- **fastmcp**: Model Context Protocol (herramientas para IA)
-- **requests**: Llamadas HTTP a APIs
-- **customtkinter**: GUI moderna
-- **ollama**: LLM local (instalable aparte)
+- `DESPLIEGUE.md` — guía operativa completa · `CHECKLIST_DESPLIEGUE.md`
+- `ARQUITECTURA_SEMILLA_ARBOL.md` · `ARQUITECTURA_AGENCIA.md` · `AGENTS.md` (reglas para IAs)
+- `.agents/` — protocolo Gate/DB-TO-DO-LIST, roles y memoria
 
-## 📝 Licencia
+## 🔒 Seguridad
 
-Este proyecto es de código abierto. Úsalo libremente.
-
-## 🤝 Contribuciones
-
-¿Sugerencias o mejoras? Abre un issue o PR.
-
----
-
-**Última actualización**: 9 de mayo de 2026  
-**Versión**: 1.0 (MVP)  
-**Estado**: 🟢 Funcional con blindaje de errores
+`.env`, `heredado.env`, `*.exe`, `*.db` están gitignored; pre-commit `scripts/check_secrets.py`
+bloquea secretos. El micelio no modifica árboles sin el Conservante; los gates críticos
+los aprueba solo la Directora Humana.

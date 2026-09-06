@@ -227,6 +227,7 @@ async def ejecutar_auditoria_sse(
     report_id = str(uuid.uuid4())
     output_filename = f"reporte_{report_id}.json"
     output_path = os.path.join(WEB_REPORTES_DIR, output_filename)
+    _tarea_inicio(report_id, negocio, ciudad)
     
     cmd = [sys.executable, "main.py", "--cli", "-n", negocio, "-c", ciudad, "-m", modo, "-o", output_path]
     if sitio:
@@ -265,13 +266,17 @@ async def ejecutar_auditoria_sse(
             try:
                 with open(output_path, "r", encoding="utf-8") as f:
                     reporte_data = json.load(f)
+                _tarea_fin(report_id, "completada")
                 yield f"data: {json.dumps({'type': 'result', 'report_id': report_id, 'report': reporte_data}, ensure_ascii=False)}\n\n"
             except Exception as e:
+                _tarea_fin(report_id, "error")
                 yield f"data: {json.dumps({'type': 'error', 'message': f'Error al leer el reporte generado: {e}'}, ensure_ascii=False)}\n\n"
         else:
+            _tarea_fin(report_id, "error")
             yield f"data: {json.dumps({'type': 'error', 'message': 'La auditoría terminó pero no se generó el archivo de reporte JSON.'}, ensure_ascii=False)}\n\n"
             
     except Exception as e:
+        _tarea_fin(report_id, "error")
         yield f"data: {json.dumps({'type': 'error', 'message': f'Error en el proceso de auditoría: {str(e)}'}, ensure_ascii=False)}\n\n"
 
 @app.get("/api/audit-stream")
@@ -455,12 +460,78 @@ def arbol_modelos():
     return {"modelos": modelos, "ollama_url": os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")}
 
 
+# --- Tareas de la estación: lo que el árbol está trabajando ---------------
+# Registro persistente (JSON) de auditorías lanzadas desde este panel:
+# en_curso al iniciar, completada/error al terminar. Es lo que muestra
+# /api/arbol/tareas (trabajo de la estación, NO procesos del sistema).
+TAREAS_ESTACION_FILE = os.path.join(WEB_REPORTES_DIR, "tareas_estacion.json")
+
+
+def _leer_tareas_estacion() -> list:
+    try:
+        with open(TAREAS_ESTACION_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+            return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _guardar_tareas_estacion(tareas: list) -> None:
+    try:
+        tmp = TAREAS_ESTACION_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(tareas[-100:], fh, ensure_ascii=False)
+        os.replace(tmp, TAREAS_ESTACION_FILE)
+    except Exception:
+        pass
+
+
+def _tarea_inicio(report_id: str, negocio: str, ciudad: str) -> None:
+    try:
+        tareas = _leer_tareas_estacion()
+        tareas.append({
+            "id": f"aud-{report_id[:8]}", "tipo": "auditoria",
+            "titulo": f"Auditoría: {negocio} en {ciudad}",
+            "estado": "en_curso", "detalle": negocio,
+            "fecha": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
+            "report_id": report_id, "fin": None,
+        })
+        _guardar_tareas_estacion(tareas)
+    except Exception:
+        pass
+
+
+def _tarea_fin(report_id: str, estado: str) -> None:
+    try:
+        tareas = _leer_tareas_estacion()
+        for t in tareas:
+            if t.get("report_id") == report_id and t.get("estado") == "en_curso":
+                t["estado"] = estado
+                t["fin"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
+        _guardar_tareas_estacion(tareas)
+    except Exception:
+        pass
+
+
 @app.get("/api/arbol/tareas")
 def arbol_tareas(limite: int = Query(25, ge=1, le=100)):
-    """Lista unificada de tareas del árbol: gates (aprobaciones), reportes y procesos."""
+    """Trabajo de la estación: auditorías (en curso/completadas) y gates."""
     tareas = []
+    vistos = set()
     arbol_id = os.getenv("ARBOL_ID", "local")
-    # Gates: aprobaciones pendientes / historial
+    # 1. Auditorías registradas por este panel (en curso primero)
+    try:
+        for t in _leer_tareas_estacion():
+            tareas.append({"id": t.get("id"), "tipo": "auditoria",
+                           "titulo": t.get("titulo", "Auditoría"),
+                           "estado": t.get("estado", "en_curso"),
+                           "detalle": t.get("detalle", ""),
+                           "fecha": t.get("fin") or t.get("fecha")})
+            if t.get("report_id"):
+                vistos.add(f"reporte_{t['report_id']}.json")
+    except Exception:
+        pass
+    # 2. Gates: aprobaciones pendientes / historial
     try:
         for a in listar_aprobaciones(arbol_id, None)[:limite]:
             estado = {"pendiente": "pendiente", "aprobada": "completada", "rechazada": "rechazada"}.get(a.get("estado"), a.get("estado", "?"))
@@ -468,11 +539,13 @@ def arbol_tareas(limite: int = Query(25, ge=1, le=100)):
                            "estado": estado, "detalle": a.get("feedback") or "", "fecha": a.get("created_at")})
     except Exception:
         pass
-    # Reportes generados = trabajo completado
+    # 3. Reportes en disco sin entrada registrada = trabajo completado
     try:
         archivos = sorted(glob.glob(os.path.join(WEB_REPORTES_DIR, "reporte_*.json")),
                           key=lambda f: os.path.getmtime(f), reverse=True)[:limite]
         for f in archivos:
+            if os.path.basename(f) in vistos:
+                continue
             titulo, negocio = os.path.basename(f), ""
             try:
                 with open(f, "r", encoding="utf-8") as fh:
@@ -486,19 +559,8 @@ def arbol_tareas(limite: int = Query(25, ge=1, le=100)):
                            "fecha": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(os.path.getmtime(f)))})
     except Exception:
         pass
-    # Procesos vivos relevantes = trabajo en curso
-    try:
-        procs = []
-        if _psutil:
-            for p in _psutil.process_iter(["pid", "name", "cpu_percent"]):
-                n = (p.info.get("name") or "").lower()
-                if any(k in n for k in ("uvicorn", "ollama", "python", "crew", "tailscale")):
-                    procs.append({"id": f"proc-{p.info['pid']}", "tipo": "proceso",
-                                  "titulo": f"{p.info.get('name')} (pid {p.info['pid']})",
-                                  "estado": "en_curso", "detalle": "", "fecha": None})
-        tareas.extend(procs[:10])
-    except Exception:
-        pass
+    # en_curso primero, resto por fecha desc
+    tareas.sort(key=lambda t: (0 if t.get("estado") == "en_curso" else 1, t.get("fecha") or ""))
     return {"arbol_id": arbol_id, "tareas": tareas[:limite], "total": len(tareas)}
 
 

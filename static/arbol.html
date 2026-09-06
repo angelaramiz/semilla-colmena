@@ -126,8 +126,8 @@ async function cargarTodo(){
   try{
     const t = await get('/api/arbol/tareas?limite=25');
     if (!t.tareas.length){ c.innerHTML = '<div class="empty">Sin tareas registradas todavía.</div>'; return; }
-    const cls = {pendiente:'b-wait', en_curso:'b-run', completada:'b-ok', aprobada:'b-ok', rechazada:'b-no'};
-    const lbl = {pendiente:'PENDIENTE', en_curso:'EN CURSO', completada:'COMPLETADA', aprobada:'APROBADA', rechazada:'RECHAZADA'};
+    const cls = {pendiente:'b-wait', en_curso:'b-run', completada:'b-ok', aprobada:'b-ok', rechazada:'b-no', error:'b-no'};
+    const lbl = {pendiente:'PENDIENTE', en_curso:'EN CURSO', completada:'COMPLETADA', aprobada:'APROBADA', rechazada:'RECHAZADA', error:'ERROR'};
     let h = '<table><thead><tr><th>Estado</th><th>Tarea</th><th>Tipo</th><th>Fecha</th></tr></thead><tbody>';
     for (const x of t.tareas){
       h += `<tr><td><span class="badge ${cls[x.estado]||'b-wait'}">${lbl[x.estado]||x.estado}</span></td><td><strong>${esc(x.titulo)}</strong>${x.detalle?`<br><small style="color:var(--mut)">${esc(x.detalle)}</small>`:''}</td><td>${x.tipo}</td><td class="small">${x.fecha||'—'}</td></tr>`;

@@ -5,12 +5,18 @@
 #  Usa 7-Zip SFX (7zCon.sfx) si está instalado; si no, cae a IExpress.
 #
 #  Uso:
-#    .\empaquetado\empaquetar.ps1   -> genera semilla-colmena.exe
+#    .\empaquetado\empaquetar.ps1                                            -> genera semilla-colmena.exe (obrero)
+#    .\empaquetado\empaquetar.ps1 -ArbolId cmd_01 -Rol comandante -Salida semilla-comandante.exe
 # ============================================================================
+param(
+  [string]$ArbolId = "arbol_obrero_01",
+  [string]$Rol = "obrero",
+  [string]$Salida = "semilla-colmena.exe"
+)
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 $staging = Join-Path $env:TEMP "semilla_sfx"
-$outExe = Join-Path $root "semilla-colmena.exe"
+$outExe = Join-Path $root $Salida
 
 $sevenZ = @("C:\Program Files\7-Zip\7z.exe","C:\Program Files (x86)\7-Zip\7z.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
 $sfxStub = @("C:\Program Files\7-Zip\7zCon.sfx","C:\Program Files (x86)\7-Zip\7zCon.sfx") | Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -34,7 +40,15 @@ if (Test-Path (Join-Path $root "semillero\heredado.env")) { Copy-Item (Join-Path
 Copy-Item (Join-Path $PSScriptRoot "maceta.ps1") $staging -Force
 Copy-Item (Join-Path $PSScriptRoot "iniciar.bat") $staging -Force
 
-Write-Host "Generando semilla-colmena.exe ..." -ForegroundColor Cyan
+# Hornear identidad por defecto (el SFX ejecuta maceta.ps1 sin argumentos)
+$macStaged = Join-Path $staging "maceta.ps1"
+$macTxt = Get-Content $macStaged -Raw
+$macTxt = $macTxt -replace '\[string\]\$ArbolId = "[^"]*"', ('[string]$ArbolId = "{0}"' -f $ArbolId)
+$macTxt = $macTxt -replace '\[string\]\$Rol = "[^"]*"', ('[string]$Rol = "{0}"' -f $Rol)
+Set-Content -Path $macStaged -Value $macTxt -NoNewline -Encoding UTF8
+Write-Host "Identidad horneada: $ArbolId (rol=$Rol)" -ForegroundColor DarkGray
+
+Write-Host "Generando $Salida ..." -ForegroundColor Cyan
 
 if ($sevenZ -and $sfxStub) {
   # ---- Método 7-Zip SFX ----
@@ -47,7 +61,7 @@ if ($sevenZ -and $sfxStub) {
   $config = Join-Path $env:TEMP "semilla_config.txt"
   Set-Content -Path $config -Value @"
 ;!@Install@!UTF-8!
-Title=Semilla Colmena
+Title=Semilla Colmena ($Rol)
 RunProgram="powershell.exe -NoProfile -ExecutionPolicy Bypass -File maceta.ps1"
 ;!@InstallEnd@!
 "@ -Encoding ASCII

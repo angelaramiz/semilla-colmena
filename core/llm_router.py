@@ -35,7 +35,7 @@ ESTRATEGIA = "estrategia"
 def _build_ollama_client():
     from openai import OpenAI
     base = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
-    model = os.getenv("LOCAL_LLM_MODEL", "qwen3:27b")
+    model = os.getenv("LOCAL_LLM_MODEL", "qwen3:4b")
     try:
         client = OpenAI(base_url=base, api_key="not-needed", timeout=60)
     except Exception:
@@ -169,7 +169,7 @@ def get_strategy_llms() -> list:
 def _get_ollama_local() -> LLM:
     """Modelo local (Ollama) para tareas rutinarias."""
     return LLM(
-        model=os.getenv("LOCAL_LLM_MODEL", "qwen3:27b"),
+        model=os.getenv("LOCAL_LLM_MODEL", "qwen3:4b"),
         base_url=os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1"),
         api_key="not-needed",
         temperature=0.01,   # determinista para tool-calling estable

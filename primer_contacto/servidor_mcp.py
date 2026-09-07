@@ -1,5 +1,13 @@
 # primer_contacto/servidor_mcp.py
-import os, json, requests, time, sys, traceback
+import os, json, time, sys, traceback
+try:
+    import requests
+except ImportError:
+    # venv desincronizado: mensaje accionable en vez de traceback crudo.
+    # Seguro porque este módulo corre standalone (stdio); nadie lo importa
+    # como librería (los agentes usan cliente MCP).
+    print("ERROR: falta el paquete 'requests'. Ejecuta: uv sync", file=sys.stderr)
+    sys.exit("ModuleNotFoundError: requests — ejecuta 'uv sync' en la raíz del repo")
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 

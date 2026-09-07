@@ -35,19 +35,28 @@ def get_local_llm(modo: str) -> LLM:
     if modo == "produccion":
         model = "qwen3-coder-next:cloud"
     else:
-        model = os.getenv("LOCAL_LLM_MODEL", "llama3.1:8b")
+        model = os.getenv("LOCAL_LLM_MODEL", "qwen3:4b")
     
-    # Verificación usando la API NATIVA (endpoint correcto: /api/tags)
+    # Verificación honesta: conectividad + existencia del modelo (evita 404 tardío)
     try:
-        import urllib.request
-        urllib.request.urlopen(f"{ollama_native}/api/tags", timeout=3)
-        print(f"✅ Ollama conectado | Modelo: {model}")
+        import urllib.request, json as _json
+        with urllib.request.urlopen(f"{ollama_native}/api/tags", timeout=3) as _resp:
+            _tags = _json.loads(_resp.read().decode("utf-8", errors="replace"))
     except Exception as e:
         print(f"\n⚠️ CRÍTICO: No se puede conectar a Ollama en {ollama_native}")
         print(f"🔍 Error: {e}")
         print("👉 Verifica: curl http://localhost:11434/api/tags")
         import sys
         sys.exit(1)
+    _nombres = [str(m.get("name", "")) for m in _tags.get("models", [])]
+    _hay = (model in _nombres) or any(n.split(":")[0] == model for n in _nombres)
+    if not _hay:
+        print(f"\n❌ Modelo '{model}' NO encontrado en Ollama.")
+        print(f"📦 Disponibles: {', '.join(_nombres) if _nombres else 'ninguno'}")
+        print(f"👉 Ejecuta: ollama pull {model}")
+        import sys
+        sys.exit(1)
+    print(f"✅ Modelo {model} disponible | Ollama conectado")
         
     # Retornar configuración para CrewAI (usa URL OpenAI-compatible)
     return LLM(
@@ -258,7 +267,7 @@ def setup_crew(modo: str) -> Crew:
         try:
             import importlib
             litellm = importlib.import_module("litellm")
-            mem_model = "qwen3-coder-next:cloud" if modo == "produccion" else os.getenv("LOCAL_LLM_MODEL", "llama3.1:8b")
+            mem_model = "qwen3-coder-next:cloud" if modo == "produccion" else os.getenv("LOCAL_LLM_MODEL", "qwen3:4b")
             litellm.model_alias_map["gpt-4o-mini"] = mem_model
             litellm.model_alias_map["gpt-4o"] = mem_model
             print(f"🧠 Memoria configurada | Mapeo LiteLLM gpt-4o-mini -> {mem_model}")

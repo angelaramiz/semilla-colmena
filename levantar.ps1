@@ -89,9 +89,11 @@ if ($tsOk) { Write-Host "Tailscale conectado. IP: $tsIp" -ForegroundColor Green 
 else { Write-Host "Tailscale no disponible desde esta sesiÃ³n (revisa la app)." -ForegroundColor Yellow }
 
 # --- 3. Ollama (solo arrancar si estÃ¡ instalado) ---
-# No basta Get-Command: suele quedar instalado por-usuario (AppData de otro
-# usuario) fuera del PATH de esta sesiÃ³n. Se busca el exe en rutas conocidas.
+# El serve responde en localhost aunque lo haya instalado OTRO usuario
+# (Get-ChildItem C:\Users\* falla sin elevaciÃ³n): probar la API PRIMERO.
 Write-Host "`n[4/5] Ollama ..." -ForegroundColor Yellow
+$apiOk = $false
+try { Invoke-WebRequest -Uri "http://localhost:11434/" -TimeoutSec 4 -UseBasicParsing | Out-Null; $apiOk = $true } catch {}
 $ollamaExe = (Get-Command ollama -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue)
 if (-not $ollamaExe) {
   $candidatos = @("C:\Program Files\Ollama\ollama.exe")
@@ -99,20 +101,23 @@ if (-not $ollamaExe) {
   $candidatos += Get-ChildItem "C:\Users\*\AppData\Local\Programs\Ollama\ollama.exe" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty FullName
   $ollamaExe = $candidatos | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
 }
-if ($ollamaExe) {
-  Write-Host "Ollama en: $ollamaExe"
-  $apiOk = $false
+if ($ollamaExe) { Write-Host "Ollama en: $ollamaExe" }
+if ($ollamaExe -and -not $apiOk) {
+  Write-Host "Arrancando ollama serve ..."
+  Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
+  Start-Sleep 6
   try { Invoke-WebRequest -Uri "http://localhost:11434/" -TimeoutSec 4 -UseBasicParsing | Out-Null; $apiOk = $true } catch {}
-  if (-not $apiOk) {
-    Write-Host "Arrancando ollama serve ..."
-    Start-Process -FilePath $ollamaExe -ArgumentList "serve" -WindowStyle Hidden -ErrorAction SilentlyContinue
-    Start-Sleep 6
-  }
-  try { Invoke-WebRequest -Uri "http://localhost:11434/" -TimeoutSec 4 -UseBasicParsing | Out-Null; Write-Host "Ollama OK." -ForegroundColor Green }
-  catch { Write-Host "Ollama instalado pero sin responder (revisa manualmente)." -ForegroundColor Yellow }
+}
+if ($apiOk) {
+  Write-Host "Ollama OK." -ForegroundColor Green
   $nmod = 0
-  try { $nmod = ((& $ollamaExe list 2>$null | Select-Object -Skip 1 | Where-Object { $_.Trim() }) | Measure-Object).Count } catch {}
+  try { $nmod = ((Invoke-RestMethod -Uri "http://localhost:11434/api/tags" -TimeoutSec 5).models | Measure-Object).Count } catch {}
+  if (-not $nmod -and $ollamaExe) {
+    try { $nmod = ((& $ollamaExe list 2>$null | Select-Object -Skip 1 | Where-Object { $_.Trim() }) | Measure-Object).Count } catch {}
+  }
   Write-Host "Modelos Ollama: $nmod"
+} elseif ($ollamaExe) {
+  Write-Host "Ollama instalado pero sin responder (revisa manualmente)." -ForegroundColor Yellow
 } else { Write-Host "Ollama no instalado (opcional)." -ForegroundColor DarkGray }
 
 # --- 4. servicios web segÃºn rol ---
@@ -140,6 +145,9 @@ foreach ($s in $servicios) {
   # Los .bat fuerzan AUTO_OPEN_BROWSER=false: un servidor lanzado desde aquÃ­ o por
   # tareas (sesiÃ³n 0) no abre pestaÃ±as solo; Levantar abre solo :8000 al final.
   Set-Content -Path $bat -Value ('@echo off' + "`r`n" + 'set AUTO_OPEN_BROWSER=false' + "`r`n" + 'cd /d "' + $repo + '"' + "`r`n" + '"' + $PY + '" -m uvicorn ' + $s.m + ' --host 127.0.0.1 --port ' + $s.p) -Encoding ASCII -Force
+  # Recrear limpio: si la tarea existÃ­a de otro usuario/instalaciÃ³n, el principal
+  # obsoleto auto-terminaba el servicio (267014). AsÃ­ el principal es quien corre hoy.
+  try { schtasks /Delete /TN $s.n /F 2>&1 | Out-Null } catch {}
   try { schtasks /Create /TN $s.n /TR "`"$bat`"" /SC ONLOGON /RL HIGHEST /F 2>&1 | Out-Null } catch {}
   # Arrancar ahora si el puerto estÃ¡ libre
   $yaEscucha = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
@@ -149,10 +157,16 @@ foreach ($s in $servicios) {
     try { Start-Process -FilePath "cmd.exe" -ArgumentList "/c", $bat -WindowStyle Hidden | Out-Null; Write-Host "â†’ $($s.n) iniciado en :$($s.p) (24/7)" } catch { Write-Host "âš ï¸  no se pudo arrancar $($s.n): $_" -ForegroundColor Yellow }
   }
 }
-Start-Sleep 6
+Start-Sleep 3
 Write-Host "`n===== RESUMEN =====" -ForegroundColor Cyan
 foreach ($s in $servicios) {
+  # Arranque en frÃ­o (import crewai/fastmcp) tarda 20-60s: sondear hasta 60s
+  # en vez de declarar FALLO a los 6s.
   $esc = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
+  for ($i = 0; ($i -lt 11) -and (-not $esc); $i++) {
+    Start-Sleep 5
+    $esc = Get-NetTCPConnection -LocalPort $s.p -State Listen -ErrorAction SilentlyContinue
+  }
   if ($esc) { Write-Host "OK  $($s.n) :$($s.p)" -ForegroundColor Green }
   else { Write-Host "FALLO $($s.n) :$($s.p)" -ForegroundColor Red }
 }

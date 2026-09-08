@@ -84,7 +84,12 @@ try {
     $tsIp = (tailscale ip -4 2>&1 | Select-Object -First 1).ToString().Trim()
     $tsOk = [bool]$tsIp
   }
-} catch { Write-Host "Tailscale gestionado por otro usuario de esta mÃ¡quina (normal)." -ForegroundColor DarkGray }
+} catch {
+  # En sesiÃ³n remota/SSH 'tailscale status' puede fallar aunque la tailnet
+  # estÃ© viva (esta misma sesiÃ³n puede venir por ella): intento directo.
+  try { $tsIp = (tailscale ip -4 2>$null | Select-Object -First 1).ToString().Trim(); if ($tsIp) { $tsOk = $true } } catch {}
+  if (-not $tsOk) { Write-Host "Tailscale gestionado por otro usuario de esta mÃ¡quina (normal)." -ForegroundColor DarkGray }
+}
 if ($tsOk) { Write-Host "Tailscale conectado. IP: $tsIp" -ForegroundColor Green }
 else { Write-Host "Tailscale no disponible desde esta sesiÃ³n (revisa la app)." -ForegroundColor Yellow }
 

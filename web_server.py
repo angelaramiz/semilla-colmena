@@ -259,6 +259,17 @@ async def ejecutar_auditoria_sse(
     output_filename = f"reporte_{report_id}.json"
     output_path = os.path.join(WEB_REPORTES_DIR, output_filename)
     _tarea_inicio(report_id, negocio, ciudad)
+
+    # OFFLOAD FORZOSO: si AUDITORIA_MOTOR apunta a un obrero, el trabajo pesado
+    # corre ALLÁ (su LLM local) y aquí solo se espera y recoge el JSON.
+    motor = os.getenv("AUDITORIA_MOTOR", "local").strip()
+    if motor and motor.lower() != "local":
+        async for chunk in _ejecutar_auditoria_obrero_sse(
+            negocio, ciudad, motor, report_id, output_path,
+            sitio, ig, fb, modelo_negocio, contexto,
+        ):
+            yield chunk
+        return
     
     cmd = [sys.executable, "main.py", "--cli", "-n", negocio, "-c", ciudad, "-m", modo, "-o", output_path]
     if sitio:
@@ -309,6 +320,96 @@ async def ejecutar_auditoria_sse(
     except Exception as e:
         _tarea_fin(report_id, "error")
         yield f"data: {json.dumps({'type': 'error', 'message': f'Error en el proceso de auditoría: {str(e)}'}, ensure_ascii=False)}\n\n"
+
+async def _ejecutar_auditoria_obrero_sse(
+    negocio: str, ciudad: str, motor: str, report_id: str, output_path: str,
+    sitio: str = "", ig: str = "", fb: str = "",
+    modelo_negocio: str = "", contexto: str = "",
+) -> Generator[str, None, None]:
+    """Offload FORZOSO al obrero: lanza allá (WMI, desacoplado), sondea el
+    reporte remoto y lo trae. Si el obrero no responde, error explícito
+    (sin fallback silencioso a local: el motor es obligatorio)."""
+    import asyncio as _aio
+    try:
+        from comunicacion import comandante_mcp as _cmd
+    except Exception as e:
+        _tarea_fin(report_id, "error")
+        yield f"data: {json.dumps({'type': 'error', 'message': f'No se pudo cargar el canal al obrero: {e}'}, ensure_ascii=False)}\n\n"
+        return
+
+    extra = ""
+    if sitio:
+        extra += f" --sitio '{sitio}'"
+    if ig:
+        extra += f" --ig '{ig}'"
+    if fb:
+        extra += f" --fb '{fb}'"
+    if modelo_negocio:
+        extra += f" --modelo-negocio '{modelo_negocio}'"
+    if contexto:
+        extra += f" --contexto '{contexto}'"
+
+    yield f"data: {json.dumps({'type': 'status', 'message': f'Delegando auditoría a {motor} (motor forzoso)...'}, ensure_ascii=False)}\n\n"
+    try:
+        raw = await _aio.to_thread(_cmd.lanzar_auditoria_obrero, motor, negocio, ciudad, report_id, extra)
+        info = json.loads(raw) if isinstance(raw, str) else raw
+    except Exception as e:
+        _tarea_fin(report_id, "error")
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Fallo al lanzar en {motor}: {e}'}, ensure_ascii=False)}\n\n"
+        return
+    if not isinstance(info, dict) or info.get("error") or not info.get("remoto_reporte"):
+        _tarea_fin(report_id, "error")
+        det = (info or {}).get("error", "sin detalle") if isinstance(info, dict) else str(info)
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Obrero {motor} no disponible: {det}. Enciéndelo e intenta de nuevo.'}, ensure_ascii=False)}\n\n"
+        return
+
+    remoto = info["remoto_reporte"]
+    yield f"data: {json.dumps({'type': 'status', 'message': f'Auditoría corriendo en {motor} con su LLM local. Esperando reporte...'}, ensure_ascii=False)}\n\n"
+    try:
+        timeout_min = int(os.getenv("AUDITORIA_TIMEOUT_MIN", "90"))
+    except Exception:
+        timeout_min = 90
+    import time as _t
+    fin = _t.time() + timeout_min * 60
+    n = 0
+    while _t.time() < fin:
+        await _aio.sleep(30)
+        n += 1
+        try:
+            vraw = await _aio.to_thread(_cmd.verificar_reporte_obrero, motor, remoto)
+            v = json.loads(vraw) if isinstance(vraw, str) else vraw
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'log', 'message': f'(sondeo {n}: sin contacto con {motor}: {e})'}, ensure_ascii=False)}\n\n"
+            continue
+        if isinstance(v, dict) and v.get("listo"):
+            yield f"data: {json.dumps({'type': 'status', 'message': f'Reporte listo en {motor}, trayéndolo...'}, ensure_ascii=False)}\n\n"
+            try:
+                await _aio.to_thread(_cmd.traer_archivo, motor, remoto, output_path)
+            except Exception as e:
+                _tarea_fin(report_id, "error")
+                yield f"data: {json.dumps({'type': 'error', 'message': f'No se pudo traer el reporte: {e}'}, ensure_ascii=False)}\n\n"
+                return
+            break
+        if n % 2 == 0:
+            yield f"data: {json.dumps({'type': 'log', 'message': f'Obrero trabajando... ({n * 0.5:.0f} min)'}, ensure_ascii=False)}\n\n"
+    else:
+        _tarea_fin(report_id, "error")
+        yield f"data: {json.dumps({'type': 'error', 'message': f'Timeout ({timeout_min} min) esperando a {motor}. El obrero puede seguir trabajando; su reporte queda en {remoto}.'}, ensure_ascii=False)}\n\n"
+        return
+
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                reporte_data = json.load(f)
+            _tarea_fin(report_id, "completada")
+            yield f"data: {json.dumps({'type': 'result', 'report_id': report_id, 'report': reporte_data}, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            _tarea_fin(report_id, "error")
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Error al leer el reporte traído: {e}'}, ensure_ascii=False)}\n\n"
+    else:
+        _tarea_fin(report_id, "error")
+        yield f"data: {json.dumps({'type': 'error', 'message': 'El obrero terminó pero el reporte no llegó.'}, ensure_ascii=False)}\n\n"
+
 
 @app.get("/api/audit-stream")
 def audit_stream(

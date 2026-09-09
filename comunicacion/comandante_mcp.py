@@ -64,12 +64,27 @@ def _ssh_cmd(a: dict, remote: str) -> list:
     ]
 
 
+def _win2scp(path: str) -> str:
+    """Normaliza ruta Windows para scp: barras invertidas = escapes remotos."""
+    return path.replace("\\", "/")
+
+
 def _scp_cmd(a: dict, local: str, remote_path: str) -> list:
     return [
         "scp", "-P", str(a["puerto"]),
         "-o", "BatchMode=yes",
         "-o", "ConnectTimeout=10",
-        local, f"{_ssh_target(a)}:{remote_path}",
+        local, f"{_ssh_target(a)}:{_win2scp(remote_path)}",
+    ]
+
+
+def _scp_get_cmd(a: dict, remote_path: str, local: str) -> list:
+    """scp INVERSO (traer): del hijo al comandante."""
+    return [
+        "scp", "-P", str(a["puerto"]),
+        "-o", "BatchMode=yes",
+        "-o", "ConnectTimeout=10",
+        f"{_ssh_target(a)}:{_win2scp(remote_path)}", local,
     ]
 
 
@@ -189,8 +204,106 @@ def propagar_archivo(arbol_id: str, origen_local: str, destino_remoto: str) -> s
                        "destino": destino_remoto, "r": r}, ensure_ascii=False)
 
 
-# --- FAILOVER: HEREDERO DEL COMANDANTE -----------------------------------
 @mcp.tool()
+def traer_archivo(arbol_id: str, remoto_path: str, destino_local: str) -> str:
+    """Trae un archivo del árbol hijo al comandante vía scp (ej. un reporte JSON).
+    Inverso de propagar_archivo."""
+    a = buscar_arbol(arbol_id)
+    if not a:
+        return json.dumps({"error": f"árbol no registrado: {arbol_id}"}, ensure_ascii=False)
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(destino_local)) or ".", exist_ok=True)
+    except Exception:
+        pass
+    r = _run(_scp_get_cmd(a, remoto_path, destino_local))
+    if r.get("ok"):
+        marcar_estado(arbol_id, "online", f"traer:{os.path.basename(remoto_path)}")
+    return json.dumps({"arbol_id": arbol_id, "remoto": remoto_path,
+                        "destino": destino_local, "r": r}, ensure_ascii=False)
+
+
+@mcp.tool()
+def lanzar_auditoria_obrero(arbol_id: str, negocio: str, ciudad: str,
+                            report_id: str = "", extra: str = "") -> str:
+    """Lanza una auditoría DESACOPLADA en un árbol obrero (trabajo pesado fuera
+    del comandante). El obrero ejecuta `main.py --cli` con su venv y escribe
+    `reportes_web/reporte_<report_id>.json` en SU repo.
+    El lanzamiento es vía WMI (sobrevive al SSH); esta función retorna de
+    inmediato con la ruta remota esperada. Usar `verificar_reporte_obrero`
+    para sondear y `traer_archivo` para recoger el JSON.
+    Requiere llave SSH del comandante al obrero (BatchMode)."""
+    a = buscar_arbol(arbol_id)
+    if not a:
+        return json.dumps({"error": f"árbol no registrado: {arbol_id}"}, ensure_ascii=False)
+    if not report_id:
+        import uuid as _uuid
+        report_id = str(_uuid.uuid4())
+    negocio = (negocio or "").replace("'", "").strip()[:80]
+    ciudad = (ciudad or "").replace("'", "").strip()[:80]
+    if not negocio or not ciudad:
+        return json.dumps({"error": "negocio y ciudad son obligatorios"}, ensure_ascii=False)
+    repo = a["repo_dir"].replace("/", "\\")
+    launcher = f"C:\\Users\\{a['usuario']}\\aud_{report_id[:8]}.ps1"
+    # Script lanzador en el obrero (venv + log propio). Sin espacios en rutas
+    # críticas para sobrevivir al parseo de cmd.exe remoto.
+    ps = (
+        f"$ErrorActionPreference='Continue';"
+        f"Set-Location '{repo}';"
+        f"$log='reportes_web\\aud_{report_id[:8]}.log';"
+        f"'inicio '+\"$(Get-Date -Format 'yyyy-MM-dd HH:mm')\"|Out-File $log -Append;"
+        f"& '.\\.venv\\Scripts\\python.exe' main.py --cli -n '{negocio}' -c '{ciudad}'"
+        f" -o 'reportes_web\\reporte_{report_id}.json' {extra} 2>&1|Out-File $log -Append;"
+        f"'exit='+$LASTEXITCODE|Out-File $log -Append;"
+        f"'AUDIT_FIN'|Out-File $log -Append"
+    )
+    # Subir lanzador (scp) y dispararlo vía WMI (desacoplado del SSH).
+    import tempfile as _tf
+    _local = os.path.join(_tf.gettempdir(), f"aud_{report_id[:8]}.ps1")
+    try:
+        with open(_local, "w", encoding="utf-8") as _fh:
+            _fh.write(ps + "\n")
+    except Exception as e:
+        return json.dumps({"arbol_id": arbol_id, "error": f"no se pudo escribir lanzador local: {e}"},
+                          ensure_ascii=False)
+    r1 = _run(_scp_cmd(a, _local, launcher))
+    try:
+        os.remove(_local)
+    except Exception:
+        pass
+    if not r1.get("ok"):
+        return json.dumps({"arbol_id": arbol_id, "error": "no se pudo subir lanzador",
+                            "r": r1}, ensure_ascii=False)
+    wmi = ("powershell -NoProfile -Command "
+           f"\"$r=([wmiclass]'Win32_Process').Create("
+           f"'powershell -NoProfile -ExecutionPolicy Bypass -File {launcher}');"
+           f"Write-Host $r.ProcessId\"")
+    r2 = _run(_ssh_cmd(a, wmi))
+    remoto_reporte = f"{repo}\\reportes_web\\reporte_{report_id}.json"
+    if r2.get("ok"):
+        marcar_estado(arbol_id, "online", f"auditoria:{report_id[:8]}")
+    return json.dumps({"arbol_id": arbol_id, "report_id": report_id,
+                        "remoto_reporte": remoto_reporte,
+                        "lanzador": launcher, "r": r2}, ensure_ascii=False)
+
+
+@mcp.tool()
+def verificar_reporte_obrero(arbol_id: str, remoto_reporte: str) -> str:
+    """Sondeo corto (no bloqueante): ¿ya existe el reporte JSON en el obrero?
+    Devuelve listo True/False + tamaño. Para el loop de espera del comandante."""
+    a = buscar_arbol(arbol_id)
+    if not a:
+        return json.dumps({"error": f"árbol no registrado: {arbol_id}"}, ensure_ascii=False)
+    probe = ("powershell -NoProfile -Command "
+             f"\"$f=Get-ChildItem '{remoto_reporte}' -ErrorAction SilentlyContinue;"
+             f"if($f){{Write-Host ('LISTO:'+$f.Length)}}else{{Write-Host 'FALTA'}}\"")
+    r = _run(_ssh_cmd(a, probe))
+    out = (r.get("stdout") or "")
+    listo = out.startswith("LISTO:")
+    return json.dumps({"arbol_id": arbol_id, "listo": listo,
+                        "detalle": out, "r": r}, ensure_ascii=False)
+
+
+# --- FAILOVER: HEREDERO DEL COMANDANTE -----------------------------------@mcp.tool()
 def exportar_inventario() -> str:
     """Exporta el inventario completo de árboles (para que un HEREDERO asuma en failover)."""
     return json.dumps(db_exportar_inventario(), ensure_ascii=False)

@@ -29,6 +29,9 @@ from pydantic import BaseModel
 
 from micelio import servidor_mcp as mic
 from db import listar_aprobaciones, resolver_aprobacion, listar_arboles
+from core import procesos as _proc
+
+_CONS_PROCS_DIR = os.path.abspath("reportes_web")
 from core.auto_open import abrir_navegador_si_local
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -116,6 +119,15 @@ def api_actualizar(x_conservante_token: str | None = Header(default=None)):
 def api_parche(body: ParcheBody, x_conservante_token: str | None = Header(default=None)):
     _authorize(x_conservante_token)
     return json.loads(mic.aplicar_parche(ruta_relativa=body.ruta_relativa, contenido=body.contenido))
+
+
+@app.get("/api/procesos")
+def api_procesos(x_conservante_token: str | None = Header(default=None)):
+    """Procesos en ejecución con fases (pestaña global).
+    El Conservante no ejecuta auditorías: aquí verás sus operaciones propias
+    (parches, upgrades) y el estado de los árboles va en 🌳 Árboles."""
+    _authorize(x_conservante_token)
+    return {"procesos": _proc.listar(_CONS_PROCS_DIR)}
 
 
 @app.get("/api/arboles")

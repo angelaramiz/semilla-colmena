@@ -170,6 +170,7 @@
                 <button class="tab-btn active" data-tab="tab-console">💻 Consola de Log</button>
                 <button class="tab-btn" id="tab-report-btn" data-tab="tab-report" disabled>📊 Reporte Estratégico</button>
                 <button class="tab-btn hidden" id="tab-admin-btn" data-tab="tab-admin">⚙️ Panel Admin</button>
+                <button class="tab-btn" data-tab="tab-procesos">⚙️ Procesos</button>
             </div>
 
             <!-- Tab 1: Consola -->
@@ -218,6 +219,17 @@
                                 <!-- Filas de usuarios inyectadas por JS -->
                             </tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab 4: Procesos en ejecución (fases, no % a ciegas) -->
+            <div class="tab-content" id="tab-procesos">
+                <div id="procesos-view" class="report-view">
+                    <div class="no-report-placeholder">
+                        <span class="placeholder-icon">⚙️</span>
+                        <h3>Sin procesos en ejecución</h3>
+                        <p>Inicia una auditoría para ver aquí sus fases en vivo.</p>
                     </div>
                 </div>
             </div>

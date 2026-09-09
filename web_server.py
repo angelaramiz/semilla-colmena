@@ -28,6 +28,7 @@ from auth import (
     get_directora_user,
 )
 from core.auto_open import abrir_navegador_si_local
+from core import procesos as _proc
 
 try:
     import psutil as _psutil
@@ -284,7 +285,8 @@ async def ejecutar_auditoria_sse(
         cmd.extend(["--contexto", contexto])
         
     yield f"data: {json.dumps({'type': 'status', 'message': f'Iniciando auditoría para {negocio} en {ciudad}...'}, ensure_ascii=False)}\n\n"
-    
+    _ult_fase = (-1, "")
+
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
@@ -297,10 +299,19 @@ async def ejecutar_auditoria_sse(
             line = await process.stdout.readline()
             if not line:
                 break
-            
+
             decoded = line.decode('utf-8', errors='replace').rstrip()
             if decoded.strip():
                 yield f"data: {json.dumps({'type': 'log', 'message': decoded}, ensure_ascii=False)}\n\n"
+                # Fases reales (no % a ciegas): del markers del crew al registro.
+                try:
+                    det = _proc.detectar_fase(decoded)
+                    if det and (det != _ult_fase):
+                        _ult_fase = det
+                        entry = _proc.avanzar(WEB_REPORTES_DIR, report_id, det[0], det[1])
+                        yield f"data: {json.dumps({'type': 'fase', 'report_id': report_id, 'fase_idx': entry.get('idx', 0), 'fases': entry.get('fases', []), 'detalle': det[1]}, ensure_ascii=False)}\n\n"
+                except Exception:
+                    pass
                 
         await process.wait()
         
@@ -364,6 +375,13 @@ async def _ejecutar_auditoria_obrero_sse(
         return
 
     remoto = info["remoto_reporte"]
+    remoto_log = info.get("remoto_log", "")
+    from core.procesos import FASES_DELEGADA
+    _proc.iniciar(WEB_REPORTES_DIR, report_id, "auditoria-delegada",
+                  f"Auditoría en {motor}: {negocio} en {ciudad}", FASES_DELEGADA,
+                  "Delegando...")
+    _proc.avanzar(WEB_REPORTES_DIR, report_id, 1, "Ejecutando en obrero...")
+    yield f"data: {json.dumps({'type': 'fase', 'report_id': report_id, 'fase_idx': 1, 'fases': FASES_DELEGADA, 'detalle': 'Ejecutando en obrero...'}, ensure_ascii=False)}\n\n"
     yield f"data: {json.dumps({'type': 'status', 'message': f'Auditoría corriendo en {motor} con su LLM local. Esperando reporte...'}, ensure_ascii=False)}\n\n"
     try:
         timeout_min = int(os.getenv("AUDITORIA_TIMEOUT_MIN", "90"))
@@ -372,9 +390,24 @@ async def _ejecutar_auditoria_obrero_sse(
     import time as _t
     fin = _t.time() + timeout_min * 60
     n = 0
+    _ult_ofase = (-1, "")
     while _t.time() < fin:
         await _aio.sleep(30)
         n += 1
+        # Fases REALES del obrero: cola de su log parseada con los mismos markers.
+        if remoto_log:
+            try:
+                craw = await _aio.to_thread(_cmd.cola_log_obrero, motor, remoto_log, 12)
+                cinfo = json.loads(craw) if isinstance(craw, str) else craw
+                for rl in (cinfo.get("log", "") or "").splitlines():
+                    det = _proc.detectar_fase(rl)
+                    if det and (det != _ult_ofase):
+                        _ult_ofase = det
+                        _proc.avanzar(WEB_REPORTES_DIR, report_id, -1,
+                                      f"[{motor}] {det[1]}")
+                        yield f"data: {json.dumps({'type': 'fase', 'report_id': report_id, 'fase_idx': 1, 'fases': FASES_DELEGADA, 'detalle': f'[{motor}] {det[1]}'}, ensure_ascii=False)}\n\n"
+            except Exception:
+                pass
         try:
             vraw = await _aio.to_thread(_cmd.verificar_reporte_obrero, motor, remoto)
             v = json.loads(vraw) if isinstance(vraw, str) else vraw
@@ -382,7 +415,9 @@ async def _ejecutar_auditoria_obrero_sse(
             yield f"data: {json.dumps({'type': 'log', 'message': f'(sondeo {n}: sin contacto con {motor}: {e})'}, ensure_ascii=False)}\n\n"
             continue
         if isinstance(v, dict) and v.get("listo"):
+            _proc.avanzar(WEB_REPORTES_DIR, report_id, 2, "Trayendo reporte...")
             yield f"data: {json.dumps({'type': 'status', 'message': f'Reporte listo en {motor}, trayéndolo...'}, ensure_ascii=False)}\n\n"
+            yield f"data: {json.dumps({'type': 'fase', 'report_id': report_id, 'fase_idx': 2, 'fases': FASES_DELEGADA, 'detalle': 'Trayendo reporte...'}, ensure_ascii=False)}\n\n"
             try:
                 await _aio.to_thread(_cmd.traer_archivo, motor, remoto, output_path)
             except Exception as e:
@@ -496,6 +531,12 @@ def _cpu_windows_delta():
         return round((1.0 - idle_d / total_d) * 100.0, 1)
     except Exception:
         return None
+
+
+@app.get("/api/procesos")
+def api_procesos():
+    """Procesos en ejecución con fases (pestaña global, sin espera a ciegas)."""
+    return {"procesos": _proc.listar(WEB_REPORTES_DIR)}
 
 
 @app.get("/api/arbol/info")
@@ -624,7 +665,9 @@ def _tarea_inicio(report_id: str, negocio: str, ciudad: str) -> None:
             "fecha": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
             "report_id": report_id, "fin": None,
         })
-        _guardar_tareas_estacion(tareas)
+        _guardar_tareas_estacion(tareas[-100:])
+        _proc.iniciar(WEB_REPORTES_DIR, report_id, "auditoria",
+                      f"Auditoría: {negocio} en {ciudad}")
     except Exception:
         pass
 
@@ -636,7 +679,8 @@ def _tarea_fin(report_id: str, estado: str) -> None:
             if t.get("report_id") == report_id and t.get("estado") == "en_curso":
                 t["estado"] = estado
                 t["fin"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime())
-        _guardar_tareas_estacion(tareas)
+        _guardar_tareas_estacion(tareas[-100:])
+        _proc.terminar(WEB_REPORTES_DIR, report_id, estado)
     except Exception:
         pass
 

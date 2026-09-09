@@ -78,6 +78,11 @@
     <div class="models" id="models"><span class="small">Cargando…</span></div>
   </div>
 
+  <div class="card" style="margin-bottom:16px">
+    <h3>⚙️ Procesos en ejecución <span class="small" style="font-weight:normal">(fases en vivo)</span></h3>
+    <div id="procesos"><div class="empty">Sin procesos en ejecución.</div></div>
+  </div>
+
   <div class="refresh">
     <h3 style="margin:0;color:var(--mut);font-size:15px">📋 Tareas del sistema</h3>
     <span><button class="btn" onclick="cargarTodo()">↻ Actualizar</button>
@@ -121,6 +126,7 @@ async function cargarTodo(){
       ? mods.modelos.map(m => `<span class="model"><code>${m.nombre}</code> ${m.tamano_gb ? m.tamano_gb + ' GB' : ''}</span>`).join('')
       : '<span class="small">Ollama no disponible</span>';
   }catch(e){ console.warn('metrics', e); }
+  cargarProcesos();
 
   const c = document.getElementById('tasks');
   try{
@@ -134,6 +140,24 @@ async function cargarTodo(){
     }
     document.getElementById('tasks').innerHTML = h + '</tbody></table>';
     document.getElementById('last').textContent = 'Actualizado: ' + new Date().toLocaleTimeString();
+  }catch(e){ c.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
+}
+function fmtT(s){ s=s||0; const m=Math.floor(s/60); return m>0?`${m}m ${s%60}s`:`${s}s`; }
+async function cargarProcesos(){
+  const c = document.getElementById('procesos');
+  try{
+    const j = await get('/api/procesos');
+    const procs = (j.procesos||[]).filter(p => p.estado === 'en_curso').slice(0,5);
+    if (!procs.length){ c.innerHTML = '<div class="empty">Sin procesos en ejecución.</div>'; return; }
+    c.innerHTML = procs.map(p => {
+      const fases = p.fases||[], idx = p.idx||0;
+      const pasos = fases.map((f,i) => {
+        const mark = i < idx ? '✓' : (i === idx ? '▶' : '○');
+        const col = i < idx ? 'var(--ok)' : (i === idx ? 'var(--warn)' : 'var(--mut)');
+        return `<div style="display:flex;gap:8px;padding:2px 0;font-size:13px;color:${col}"><span>${mark}</span><span>${esc(f)}</span></div>`;
+      }).join('');
+      return `<div style="border-bottom:1px solid var(--line);padding:8px 0"><strong>${esc(p.titulo)}</strong> <span class="small">⏱ ${fmtT(p.transcurrido_s)}</span>${pasos}<div class="small" style="font-style:italic">${esc(p.detalle||'')}</div></div>`;
+    }).join('');
   }catch(e){ c.innerHTML = '<div class="empty">Error: ' + e.message + '</div>'; }
 }
 function esc(s){ return String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }

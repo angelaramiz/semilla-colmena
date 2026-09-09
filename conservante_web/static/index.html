@@ -72,6 +72,16 @@
     </div>
   </div>
 
+  <!-- ====== PROCESOS EN EJECUCIÓN (fases, no % a ciegas) ====== -->
+  <div class="trees-section card">
+    <h2>
+      <span>⚙️ Procesos en ejecución</span>
+      <button class="btn sm" onclick="cargarProcesos()" style="margin-left:auto">↻ Actualizar</button>
+    </h2>
+    <div id="procesos-container"><div class="empty-state">Sin procesos en ejecución.</div></div>
+    <div class="last-check">El Conservante no ejecuta auditorías: aquí verás sus operaciones propias. El trabajo de los árboles se ve en sus paneles :8000.</div>
+  </div>
+
   <!-- ====== MANTENIMIENTO ====== -->
   <div class="grid" style="margin-top:16px">
     <div class="card"><h3>Salud de estructura</h3><button class="btn" onclick="salud()">Verificar</button></div>
@@ -161,6 +171,28 @@ function toggleAutoRefresh(){
     clearInterval(refreshInterval); refreshInterval = null;
   }
 }
+
+// ====== PROCESOS EN EJECUCIÓN ======
+function escP(t){ return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+function fmtPT(s){ s=s||0; const m=Math.floor(s/60); return m>0?m+'m '+(s%60)+'s':s+'s'; }
+async function cargarProcesos(){
+  const c = document.getElementById('procesos-container');
+  try{
+    const j = await req('/api/procesos');
+    const procs = (j.procesos||[]).filter(p => p.estado === 'en_curso');
+    if (!procs.length){ c.innerHTML = '<div class="empty-state">Sin procesos en ejecución.</div>'; return; }
+    c.innerHTML = procs.map(p => {
+      const fases = p.fases||[], idx = p.idx||0;
+      const pasos = fases.map((f,i) => {
+        const mark = i < idx ? '✓' : (i === idx ? '▶' : '○');
+        const col = i < idx ? 'var(--ok)' : (i === idx ? 'var(--warn)' : 'var(--mut)');
+        return `<div style="display:flex;gap:8px;padding:2px 0;font-size:13px;color:${col}"><span>${mark}</span><span>${escP(f)}</span></div>`;
+      }).join('');
+      return `<div style="border-bottom:1px solid var(--line);padding:8px 0"><strong>${escP(p.titulo)}</strong> <span style="font-size:11px;color:var(--mut)">⏱ ${fmtPT(p.transcurrido_s)}</span>${pasos}<div style="font-size:12px;color:var(--mut);font-style:italic">${escP(p.detalle||'')}</div></div>`;
+    }).join('');
+  }catch(e){ c.innerHTML = '<div class="empty-state red">Error: ' + e.message + '</div>'; }
+}
+setInterval(()=>{ if(!document.hidden) cargarProcesos(); }, 15000);
 
 // ====== NOTIFICACIONES DE NACIMIENTO ======
 let ultimoArbolId = 0;

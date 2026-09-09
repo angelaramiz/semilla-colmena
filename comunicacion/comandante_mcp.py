@@ -298,6 +298,7 @@ def lanzar_auditoria_obrero(arbol_id: str, negocio: str, ciudad: str,
         marcar_estado(arbol_id, "online", f"auditoria:{report_id[:8]}")
     return json.dumps({"arbol_id": arbol_id, "report_id": report_id,
                         "remoto_reporte": remoto_reporte,
+                        "remoto_log": f"{repo}\\reportes_web\\aud_{report_id[:8]}.log",
                         "lanzador": launcher, "r": r2}, ensure_ascii=False)
 
 
@@ -316,6 +317,25 @@ def verificar_reporte_obrero(arbol_id: str, remoto_reporte: str) -> str:
     listo = out.startswith("LISTO:")
     return json.dumps({"arbol_id": arbol_id, "listo": listo,
                         "detalle": out, "r": r}, ensure_ascii=False)
+
+
+@mcp.tool()
+def cola_log_obrero(arbol_id: str, remoto_log: str, lineas: int = 15) -> str:
+    """Trae la COLA del log de un trabajo en el obrero (para mostrar fases
+    reales en la pestaña Procesos sin traer el archivo completo)."""
+    a = buscar_arbol(arbol_id)
+    if not a:
+        return json.dumps({"error": f"árbol no registrado: {arbol_id}"}, ensure_ascii=False)
+    try:
+        n = max(1, min(int(lineas), 40))
+    except Exception:
+        n = 15
+    probe = ("powershell -NoProfile -Command "
+             f"\"Get-Content '{remoto_log}' -ErrorAction SilentlyContinue"
+             f"|Select-Object -Last {n}\"")
+    r = _run(_ssh_cmd(a, probe))
+    return json.dumps({"arbol_id": arbol_id, "log": r.get("stdout", ""),
+                        "ok": r.get("ok", False)}, ensure_ascii=False)
 
 
 # --- FAILOVER: HEREDERO DEL COMANDANTE -----------------------------------@mcp.tool()

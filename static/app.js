@@ -338,6 +338,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         logType = 'warning';
                     }
                     appendLogLine(data.message, logType);
+                } else if (data.type === 'fase') {
+                    renderFase(data);
+                    appendLogLine(`➡️ ${data.detalle}`, 'system');
                 } else if (data.type === 'result') {
                     appendLogLine("🎉 Auditoría completada con éxito. Procesando reporte...", "success");
                     renderReport(data.report);
@@ -369,7 +372,56 @@ document.addEventListener('DOMContentLoaded', () => {
         btnSubmit.disabled = false;
         btnText.textContent = "🚀 Iniciar Auditoría";
         btnLoader.classList.add('hidden');
+        cargarProcesos();
     }
+
+    // --- PESTAÑA GLOBAL: PROCESOS EN EJECUCIÓN (fases, no % a ciegas) ---
+    function fmtTranscurrido(s) {
+        s = s || 0;
+        const m = Math.floor(s / 60), ss = s % 60;
+        return m > 0 ? `${m}m ${ss}s` : `${ss}s`;
+    }
+    function escProc(t) {
+        return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    }
+    function renderProcesosTab(procs) {
+        const c = document.getElementById('procesos-view');
+        if (!c) return;
+        if (!procs || !procs.length) {
+            c.innerHTML = '<div class="no-report-placeholder"><span class="placeholder-icon">⚙️</span><h3>Sin procesos en ejecución</h3><p>Inicia una auditoría para ver aquí sus fases en vivo.</p></div>';
+            return;
+        }
+        c.innerHTML = procs.map(p => {
+            const fases = p.fases || [];
+            const idx = p.idx || 0;
+            const vivo = p.estado === 'en_curso';
+            const pasos = fases.map((f, i) => {
+                const cls = i < idx ? 'done' : (i === idx && vivo ? 'now' : (i === idx && !vivo ? (p.estado === 'completada' ? 'done' : 'bad') : 'todo'));
+                const mark = i < idx || (!vivo && p.estado === 'completada') ? '✓' : (i === idx && vivo ? '▶' : '○');
+                return `<div class="fase ${cls}"><span class="fase-mark">${mark}</span><span>${escProc(f)}</span></div>`;
+            }).join('');
+            const badge = vivo ? '<span class="proc-badge run">EN CURSO</span>'
+                : (p.estado === 'completada' ? '<span class="proc-badge ok">COMPLETADA</span>' : `<span class="proc-badge bad">${escProc(p.estado || '').toUpperCase()}</span>`);
+            return `<div class="proc-card"><div class="proc-head"><strong>${escProc(p.titulo)}</strong>${badge}</div><div class="proc-time">⏱ ${fmtTranscurrido(p.transcurrido_s)}</div><div class="proc-fases">${pasos}</div><div class="proc-detalle">${escProc(p.detalle || '')}</div></div>`;
+        }).join('');
+    }
+    function renderFase(data) {
+        // Evento en vivo: reconstruye vista mínima (1 proceso) y refresca lista.
+        if (data && data.fases) {
+            renderProcesosTab([{ id: data.report_id || 'x', tipo: 'auditoria', titulo: data.detalle || 'Auditoría', estado: 'en_curso', fases: data.fases, idx: data.fase_idx || 0, detalle: data.detalle || '', transcurrido_s: 0 }]);
+        }
+        cargarProcesos();
+    }
+    async function cargarProcesos() {
+        try {
+            const res = await fetch('/api/procesos');
+            if (!res.ok) return;
+            const j = await res.json();
+            renderProcesosTab(j.procesos || []);
+        } catch (e) { /* silencioso: no tapar la consola */ }
+    }
+    setInterval(() => { if (!document.hidden) cargarProcesos(); }, 8000);
+    cargarProcesos();
 
     // --- PANEL DE ADMINISTRACIÓN ---
     async function loadAdminUsers() {

@@ -754,3 +754,20 @@ body {
 .btn-delete:hover {
     background-color: #dc2626;
 }
+
+/* Procesos en ejecucion (fases) */
+.proc-card{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.09);border-radius:10px;padding:12px 14px;margin-bottom:12px}
+.proc-head{display:flex;align-items:center;gap:10px;justify-content:space-between}
+.proc-badge{font-size:11px;padding:2px 10px;border-radius:12px;font-weight:700}
+.proc-badge.run{background:#3a3a1a;color:#f5d547;animation:pulse 1.6s infinite}
+.proc-badge.ok{background:#1a3a2a;color:#2ecc71}
+.proc-badge.bad{background:#3a1a1a;color:#e74c3c}
+@keyframes pulse{50%{opacity:.55}}
+.proc-time{font-size:12px;opacity:.7;margin:4px 0 8px}
+.fase{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:13px}
+.fase-mark{width:20px;text-align:center}
+.fase.done{color:#2ecc71}
+.fase.now{color:#f5d547;font-weight:700}
+.fase.todo{opacity:.45}
+.fase.bad{color:#e74c3c}
+.proc-detalle{font-size:12px;opacity:.75;margin-top:8px;font-style:italic}

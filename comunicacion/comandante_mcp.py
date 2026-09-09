@@ -254,7 +254,9 @@ def lanzar_auditoria_obrero(arbol_id: str, negocio: str, ciudad: str,
         # Auto-registro en el panel del obrero (tareas_estacion.json): así
         # /api/arbol/tareas muestra también el trabajo que llega delegado.
         f"$tj='reportes_web\\tareas_estacion.json';"
-        f"$t=@();if(Test-Path $tj){{try{{$t=Get-Content $tj -Raw|ConvertFrom-Json}}catch{{}}}};"
+        # OJO WinPS5.1: ConvertFrom-Json de 1 elemento devuelve ESCALAR y
+        # `$escalar += obj` revienta (sin op_Addition). Forzar arreglo con @().
+        f"$t=@();if(Test-Path $tj){{try{{$t=@(Get-Content $tj -Raw|ConvertFrom-Json)}}catch{{}}}};"
         f"$t+=[pscustomobject]@{{id='aud_{report_id[:8]}';tipo='auditoria-delegada';"
         f"titulo='Auditoría delegada: {negocio} en {ciudad}';estado='en_curso';"
         f"detalle='{negocio} (delegada)';fecha=(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss');"
@@ -264,7 +266,7 @@ def lanzar_auditoria_obrero(arbol_id: str, negocio: str, ciudad: str,
         f" -o 'reportes_web\\reporte_{report_id}.json' {extra} 2>&1|Out-File $log -Append;"
         f"'exit='+$LASTEXITCODE|Out-File $log -Append;"
         f"$ok=Test-Path 'reportes_web\\reporte_{report_id}.json';"
-        f"$t2=Get-Content $tj -Raw|ConvertFrom-Json;"
+        f"$t2=@(Get-Content $tj -Raw|ConvertFrom-Json);"
         f"foreach($x in $t2){{if($x.report_id -eq '{report_id}')"
         f"{{$x.estado=$(if($ok){{'completada'}}else{{'error'}});"
         f"$x.fin=(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss')}}}};"

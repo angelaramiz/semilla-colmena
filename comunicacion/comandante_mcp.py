@@ -251,9 +251,24 @@ def lanzar_auditoria_obrero(arbol_id: str, negocio: str, ciudad: str,
         f"Set-Location '{repo}';"
         f"$log='reportes_web\\aud_{report_id[:8]}.log';"
         f"'inicio '+\"$(Get-Date -Format 'yyyy-MM-dd HH:mm')\"|Out-File $log -Append;"
+        # Auto-registro en el panel del obrero (tareas_estacion.json): así
+        # /api/arbol/tareas muestra también el trabajo que llega delegado.
+        f"$tj='reportes_web\\tareas_estacion.json';"
+        f"$t=@();if(Test-Path $tj){{try{{$t=Get-Content $tj -Raw|ConvertFrom-Json}}catch{{}}}};"
+        f"$t+=[pscustomobject]@{{id='aud_{report_id[:8]}';tipo='auditoria-delegada';"
+        f"titulo='Auditoría delegada: {negocio} en {ciudad}';estado='en_curso';"
+        f"detalle='{negocio} (delegada)';fecha=(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss');"
+        f"report_id='{report_id}';fin=$null}};"
+        f"($t|Select-Object -Last 100)|ConvertTo-Json -Depth 4|Set-Content $tj -Encoding UTF8;"
         f"& '.\\.venv\\Scripts\\python.exe' main.py --cli -n '{negocio}' -c '{ciudad}'"
         f" -o 'reportes_web\\reporte_{report_id}.json' {extra} 2>&1|Out-File $log -Append;"
         f"'exit='+$LASTEXITCODE|Out-File $log -Append;"
+        f"$ok=Test-Path 'reportes_web\\reporte_{report_id}.json';"
+        f"$t2=Get-Content $tj -Raw|ConvertFrom-Json;"
+        f"foreach($x in $t2){{if($x.report_id -eq '{report_id}')"
+        f"{{$x.estado=$(if($ok){{'completada'}}else{{'error'}});"
+        f"$x.fin=(Get-Date -Format 'yyyy-MM-ddTHH:mm:ss')}}}};"
+        f"$t2|ConvertTo-Json -Depth 4|Set-Content $tj -Encoding UTF8;"
         f"'AUDIT_FIN'|Out-File $log -Append"
     )
     # Subir lanzador (scp) y dispararlo vía WMI (desacoplado del SSH).

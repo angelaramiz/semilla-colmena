@@ -65,7 +65,7 @@ def get_local_llm(modo: str) -> LLM:
         api_key="not-needed",
         temperature=0.01,   # Llama 3.1: bajo para tool-calling estable
         top_p=0.9,
-        timeout=120,
+        timeout=int(os.getenv("OLLAMA_TIMEOUT_SEG", "600")),  # 4b en GPU parcial tarda; 120s causaba timeouts
         max_tokens=2048
     )
 

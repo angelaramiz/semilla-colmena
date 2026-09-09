@@ -19,6 +19,7 @@ PROVIDER = os.getenv("DATA_PROVIDER", "mock").lower()  # Default a mock, no a se
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "").strip()
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
 SERPER_API_KEY = os.getenv("SERPER_API_KEY", "").strip()
+SEARXNG_URL = os.getenv("SEARXNG_URL", "http://127.0.0.1:8080").rstrip("/")  # sin key; "" = deshabilitado
 
 # Logging helper para debug
 def log_error(msg: str):
@@ -266,13 +267,42 @@ def _buscar_red_con_serper(red: str, nombre_negocio: str) -> dict:
         log_error(f"Error Serper web search para {red}: {e}")
         return {"url": f"https://www.{domain}/", "existe": False, "status": "error"}
 
+def _buscar_red_con_searxng(red: str, nombre_negocio: str) -> dict:
+    """Verifica red social vía SearXNG propio. Mismo shape que serpapi/serper.
+    Lanza excepción si no hay instancia (el llamador cae al siguiente provider)."""
+    import urllib.parse
+    domain = "instagram.com" if red == "instagram" else "facebook.com"
+    url = (f"{SEARXNG_URL}/search?q="
+           f"{urllib.parse.quote(f'{nombre_negocio} site:{domain}')}"
+           f"&format=json&language=es-MX")
+    res = requests.get(url, timeout=15)
+    res.raise_for_status()
+    for r in (res.json().get("results", []) or [])[:5]:
+        link = r.get("url", "")
+        if domain in link:
+            return {"url": link, "existe": True, "status": 200, "fuente": "searxng"}
+    return {"url": f"https://www.{domain}/", "existe": False, "status": 404, "fuente": "searxng"}
+
 @mcp.tool()
 def verificar_redes(nombre_negocio: str) -> str:
     """Verifica existencia de Instagram y Facebook"""
     try:
         resultados = {}
         redes = ["instagram", "facebook"]
-        
+
+        # 0. SearXNG primero (gratis, propio): por red, con caída al provider.
+        if SEARXNG_URL:
+            pendientes = []
+            for red in redes:
+                try:
+                    resultados[red] = _buscar_red_con_searxng(red, nombre_negocio)
+                except Exception as e:
+                    log_error(f"SearXNG no disponible para {red} ({str(e)[:50]}), sigo con {PROVIDER}")
+                    pendientes.append(red)
+            if not pendientes:
+                return json.dumps(resultados, ensure_ascii=False)
+            redes = pendientes
+
         # 1. Intentar con SerpAPI / Serper si están configurados
         if PROVIDER == "serpapi" and SERPAPI_KEY:
             for red in redes:
@@ -386,10 +416,38 @@ def buscar_competidores(categoria: str, ciudad: str) -> str:
         log_error(f"Error en buscar_competidores: {e}")
         return json.dumps([{"error": str(e)}], ensure_ascii=False)
 
+def _buscar_presencia_con_searxng(query: str) -> list:
+    """Presencia web vía SearXNG propio (`/search?format=json`).
+    Devuelve lista [{titulo, link, snippet}] o lanza excepción (el llamador
+    cae a serper/serpapi → mock con la cadena existente)."""
+    import urllib.parse
+    url = f"{SEARXNG_URL}/search?q={urllib.parse.quote(query)}&format=json&language=es-MX"
+    res = requests.get(url, timeout=15)
+    res.raise_for_status()
+    data = res.json()
+    resultados = []
+    for r in (data.get("results", []) or [])[:5]:
+        if r.get("title") and r.get("url"):
+            resultados.append({
+                "titulo": r.get("title", ""),
+                "link": r.get("url", ""),
+                "snippet": r.get("content", ""),
+                "fuente": "searxng",
+            })
+    if not resultados:
+        raise ValueError("SearXNG sin resultados útiles")
+    return resultados
+
 @mcp.tool()
 def buscar_presencia_web(query: str) -> str:
     """Busca menciones generales, noticias o presencia web de una marca"""
     try:
+        # 0. SearXNG primero (gratis, propio, sin key): fail-fast si no hay instancia.
+        if SEARXNG_URL:
+            try:
+                return json.dumps(_buscar_presencia_con_searxng(query), ensure_ascii=False)
+            except Exception as e:
+                log_error(f"SearXNG no disponible ({str(e)[:60]}), sigo con {PROVIDER}")
         if PROVIDER == "serpapi" and SERPAPI_KEY:
             url = "https://serpapi.com/search.json"
             params = {

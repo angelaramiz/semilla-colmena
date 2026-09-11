@@ -25,7 +25,7 @@ from dotenv import load_dotenv
 
 from core.permisos import rol_tiene_micelio, es_conservante
 from core.mision import resumen_mision, mision_json
-from db import crear_aprobacion, listar_aprobaciones, resolver_aprobacion
+from db import crear_aprobacion, listar_aprobaciones
 
 # Raíz del proyecto = parent de micelio/
 MICELIO_DIR = os.path.dirname(os.path.abspath(__file__))

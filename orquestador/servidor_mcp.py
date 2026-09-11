@@ -24,7 +24,7 @@ if PROJECT_ROOT not in sys.path:
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 
-from db import crear_aprobacion, listar_aprobaciones, resolver_aprobacion
+from db import crear_aprobacion, listar_aprobaciones, resolver_aprobacion as _resolver_aprobacion_db
 from core.clasificador import clasificar_instruccion_json
 from core.registro_ramas import REGISTRO_RAMAS
 
@@ -91,7 +91,7 @@ def consultar_aprobacion(aprobacion_id: int) -> str:
 def resolver_aprobacion(aprobacion_id: int, decision: str, feedback: str = "") -> str:
     """Aprueba ('aprobada') o rechaza ('rechazada') una aprobación pendiente."""
     try:
-        res = resolver_aprobacion(aprobacion_id, decision, feedback)
+        res = _resolver_aprobacion_db(aprobacion_id, decision, feedback)
         if res is None:
             return json.dumps({"error": "aprobacion no encontrada"}, ensure_ascii=False)
         return json.dumps(res, ensure_ascii=False)

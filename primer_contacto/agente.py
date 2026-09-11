@@ -6,7 +6,7 @@ import sys
 from typing import cast, Any, Annotated
 from io import TextIOBase
 
-from mcp import ClientSession, StdioServerParameters
+from mcp import ClientSession
 from mcp.types import TextContent
 
 from crewai import Agent, Task, Crew, LLM

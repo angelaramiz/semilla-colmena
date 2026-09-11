@@ -20,7 +20,7 @@ from crewai import Agent, Task, Crew
 from crewai.tools import tool
 from dotenv import load_dotenv
 
-from core.llm_router import get_llm, ESTRATEGIA, RUTINA
+from core.llm_router import get_llm, ESTRATEGIA
 
 load_dotenv()
 

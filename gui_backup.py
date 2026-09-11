@@ -6,7 +6,6 @@ import subprocess
 import json
 import os
 import threading
-from datetime import datetime
 
 # Configuración de apariencia
 ctk.set_appearance_mode("dark")
@@ -373,8 +372,8 @@ class AuditoriaApp(ctk.CTk):
                 self.after(0, lambda: self.actualizar_status("❌ Error en ejecución", "error"))
                 
         except Exception as e:
-            self.after(0, lambda: self.actualizar_status(f"❌ Error: {e}", "error"))
-            self.after(0, lambda: self.agregar_resultado(f"Error: {e}"))
+            self.after(0, lambda e=e: self.actualizar_status(f"❌ Error: {e}", "error"))
+            self.after(0, lambda e=e: self.agregar_resultado(f"Error: {e}"))
         finally:
             self.ejecutando = False
             self.after(0, lambda: self.btn_ejecutar.configure(state="normal", text="🚀 Ejecutar Auditoría"))

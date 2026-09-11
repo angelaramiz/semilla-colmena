@@ -2,13 +2,12 @@
 # Interfaz gráfica para el Auditor de Huella Digital
 import customtkinter as ctk
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 import subprocess
 import json
 import os
 import threading
 import time
-import sys
 import requests
 import io
 from PIL import Image
@@ -208,15 +207,6 @@ class AuditoriaApp(ctk.CTk):
         
     def agregar_log(self, texto, tipo="info"):
         """Agrega texto al log con colores"""
-        # Colores por tipo
-        colores = {
-            "info": "white",
-            "success": "#2ecc71",
-            "error": "#e74c3c",
-            "warning": "#f39c12",
-            "json": "#3498db"
-        }
-        
         self.text_log.insert(tk.END, texto + "\n", tipo)
         self.text_log.see(tk.END)
         
@@ -363,7 +353,7 @@ class AuditoriaApp(ctk.CTk):
                 self.after(0, lambda: self.actualizar_status("❌ La ejecución terminó con errores", "error"))
                 
         except Exception as e:
-            self.after(0, lambda: self.actualizar_status(f"❌ Error fatal: {e}", "error"))
+            self.after(0, lambda e=e: self.actualizar_status(f"❌ Error fatal: {e}", "error"))
         finally:
             self.ejecutando = False
             self.after(0, lambda: self.btn_ejecutar.configure(state="normal", text="🚀 Ejecutar Auditoría"))

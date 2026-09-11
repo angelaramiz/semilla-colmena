@@ -1,59 +1,40 @@
 # AGENTS.md — Reglas para agentes IA en este proyecto
 
-## 🔍 Búsqueda de código: usar CodeGraph primero
+## 🔍 Código: CodeGraph primero
 
-Este proyecto está indexado con **CodeGraph** (`.codegraph/` + servidor MCP `codegraph`).
+Repo indexado (`.codegraph/` + MCP `codegraph`). Antes de `grep`/`find`/glob o leer a ciegas: `codegraph_explore` (fuente verbatim + blast radius). CLI: `codegraph explore "símbolos o pregunta"`. El watcher re-indexa en ~1s; para cambios masivos, `codegraph sync`.
 
-**Regla obligatoria:** antes de hacer búsquedas genéricas (`grep`/`find`/glob) o de leer
-archivos a ciegas para entender la estructura, usa CodeGraph:
+## ⚙️ Entorno y comandos (solo `uv`, nunca `pip` global)
 
-- Herramienta MCP: `codegraph_explore` (consulta por símbolo, archivo o pregunta; devuelve
-  fuente verbatim + blast radius).
-- CLI: `codegraph explore "pregunta o símbolos"` desde la raíz del repo.
+- Python ≥3.12. Deps: `uv sync` · correr: `uv run python <script>` · añadir: `uv add <paq>` (`crewai`, `fastmcp`, `fastapi`/`uvicorn`, `sqlalchemy`, `bcrypt`/`pyjwt` en `pyproject.toml`).
+- Entrada real: `main.py` — `--orquestador`, `--campana`, `--rama <nombre> --inputs '{}'`, `--micelio`, `--clasificar`, `--arboles` (ver `README.md` para flags exactos).
+- Paneles (FastAPI/Uvicorn): `:8000` árbol (`web_server.py`), `:8001` comandante (`comandante_web.py`), `:8002` conservante (`conservante_web.py`). Conservante exige `CONSERVANTE_WEB_TOKEN` (sin él responde 503); Comandante lo exige solo si está definido. `AUTO_OPEN_BROWSER=true` abre el panel al arrancar (solo localhost).
+- Arranque en frío tarda 20-60s (import `crewai`/`fastmcp`): no declares caído un servicio sin esperar.
 
-CodeGraph devuelve la fuente actual en disco, las rutas con número de línea y el
-**blast radius** (qué depende de qué) — ahorra rondas de búsqueda y lectura.
+## 🤖 Modelos y proveedores
 
-Si el índice se desactualiza tras editar, el watcher lo re-indexa solo (~1s); para cambios
-masivos se puede pedir `codegraph sync`.
+- LLM en `core/llm_router.py`: rutina = Ollama local (`LOCAL_LLM_MODEL`, default `qwen3:4b`, `LOCAL_LLM_BASE_URL` default `http://localhost:11434/v1`); estrategia = OpenRouter con fallbacks y caída a Ollama. El health check valida que el modelo **exista** en `/api/tags` — un `✅ conectado` sin modelo es bug, no estado.
+- Búsqueda en `primer_contacto/servidor_mcp.py`: `DATA_PROVIDER` (default `mock`, nunca asumas keys); cadena `searxng → serper/serpapi → mock` (`SEARXNG_URL`, default `127.0.0.1:8080`, vacío = off). Funciones `*maps*`/`google_maps` son de Google Maps: no tocarlas sin orden que las nombre.
 
----
+## 🔒 Secretos y autoridad
 
-## 🎯 Objetivo principal (misión de la colmena — `core/mision.py`)
+- Gitignored y jamás commiteables: `.env`, `semillero/heredado.env`, `*.exe`, `*.db`. Pre-commit `scripts/check_secrets.py` bloquea secretos — todo commit con código sensible pasa su grep antes del push.
+- Micelio nunca modifica un árbol sin el Conservante (`core/mision.py`); los gates críticos (`db.Aprobacion`, `/aprobaciones`) solo los aprueba la Directora Humana.
 
-Cada árbol y su micelio cumplen una misión permanente (aunque la máquina se reinicie):
-1. **Siempre conectado y operando.**
-2. **Siempre en buena salud**: si hay errores, el micelio hace análisis de estado y solicita
-   al árbol **CONSERVANTE** permiso para auto-ejecutar mantenimiento.
-3. **Sin modificación sin autorización**: el micelio NO altera su árbol sin autorización
-   del CONSERVANTE (jerarquía más alta). Sistema de auth para quien opera los árboles.
-4. **Siempre en la red privada** y en comunicación con los árboles.
+## 🪟 Gotchas de Windows PowerShell 5.1
 
-## 🏗️ Arquitectura de la colmena (resumen para agentes)
+- No existe `head`/`&&`: usa `Select-Object -First`, y `; if ($?) { }` para encadenar. Los arrays se envuelven con `@()` (`+=` sobre objetos revienta).
+- Puertos en uso: `Get-NetTCPConnection -LocalPort <p> -State Listen` (más fiable que filtrar `CommandLine`).
+- Los scripts `.ps1` que corren en nodos fijan UTF-8 explícito; si ves mojibake, es encoding, no corrupción.
 
-Sistema multi-agente "mente colmena" (CrewAI + FastMCP + Ollama/OpenRouter):
+## ☠️ `Levantar Colmena.bat` / `levantar.ps1` hace `fetch + reset --hard`
 
-- **Semilla**: `core/` (enrutador de modelos, clasificador, registro de ramas, manifiesto, permisos).
-- **Tronco**: `orquestador/` (agente orquestador + pipeline de campaña).
-- **Ramas (obreros)**: `contenido/`, `redes/`, `analitica/`, `investigacion/`, `atencion_cliente/`, `planeacion/`, `auditoria/` (primer_contacto).
-- **Micelio (mantenimiento)**: `micelio/`.
-- **Comunicación raíz→árboles**: `comunicacion/` (SSH/Tailscale).
-- **Paneles web**: `web_server.py` (obrero), `comandante_web.py`, `conservante_web.py` (dev).
-- **Despliegue**: `sembrar.sh`, `Dockerfile`, `docker-compose.yml`, `core/manifiesto.py`.
+Borra todo lo no commiteado. **Regla: commit + push antes de cualquier Levantar.** Ya costó 2 ciclos una vez.
 
-Modelos: **Ollama local** (rutina, `qwen3:27b`) + **OpenRouter** (estrategia, `z-ai/glm-5.2:free` con fallbacks y fallback a Ollama). Enrutado en `core/llm_router.py`.
+## 🤝 Trabajo multi-agente (`.agents/`)
 
-Gates de aprobación humana: `db.Aprobacion` + endpoints `/aprobaciones` (solo la Directora).
+El flujo TPM ↔ Dev Jr vive en `.agents/Gate/` (`input.md` → `output.md`) con Kanban en `.agents/DB_TO-DO-LIST/` (`Pending → onProces → Audit → Finished-db/`). Lee los `Context.md` y `protocol/` vigentes antes de operar — nunca asumas el protocolo de memoria. Topología e inventario vivos: `main.py --arboles` y tabla Supabase `arboles_remotos` (no hardcodees IPs de nodos, cambian).
 
----
+## 📎 Regla 2026-09-09 — tareas directas del Dev Principal
 
-## ⚙️ Comandos útiles
-
-```bash
-uv run python main.py --orquestador "instrucción"   # Tronco
-uv run python main.py --campana "objetivo"          # pipeline de campaña
-uv run python main.py --rama <nombre> --inputs '{}' # rama individual
-uv run python main.py --micelio                     # mantenimiento (salud/reparar)
-uv run python main.py --clasificar "texto"          # clasificación de tarea
-uv run python main.py --arboles                     # inventario del comandante
-```
+Toda orden directa del Dev Principal fuera de ciclo se reporta igual en `.agents/Gate/output.md` como anexo fechado (fecha, orden, cambios/commits, estado), sin borrar la entrega pendiente de revisión.

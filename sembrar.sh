@@ -334,7 +334,7 @@ fi
 # ---------------------------------------------------------------------------
 # 6) Verificación de modelos (config, no llamada en vivo)
 # ---------------------------------------------------------------------------
-$PY -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA, get_strategy_llms; print('rutina     ->', get_llm(RUTINA).model); print('estrategia ->', get_llm(ESTRATEGIA).model); print('cadena     ->', [l.model for l in get_strategy_llms()])"
+$PY -c "from core.llm_router import get_llm, RUTINA, ESTRATEGIA; print('rutina     ->', get_llm(RUTINA).model); print('estrategia ->', get_llm(ESTRATEGIA).model)"
 echo "→ Modelos configurados"
 
 # ---------------------------------------------------------------------------

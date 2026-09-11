@@ -150,22 +150,6 @@ def get_llm(nivel: str = RUTINA) -> LLM:
     return _get_ollama_local()
 
 
-def get_strategy_llms() -> list:
-    """Retorna la lista ordenada de LLMs de estrategia (primario + fallbacks).
-
-    Útil para rotar cuando un modelo ':free' responde 429 (rate limit): se
-    intenta el primario y, si falla, se cae al siguiente candidato.
-    """
-    models = [os.getenv("OPENROUTER_MODEL", "z-ai/glm-5.2:free")]
-    fallbacks = [
-        m.strip()
-        for m in os.getenv("OPENROUTER_FALLBACK_MODELS", "").split(",")
-        if m.strip()
-    ]
-    models.extend(fallbacks)
-    return [_get_openrouter(m) for m in models]
-
-
 def _get_ollama_local() -> LLM:
     """Modelo local (Ollama) para tareas rutinarias."""
     return LLM(

@@ -74,6 +74,26 @@
 
   <div class="log-title">Resultado</div>
   <pre id="out">Selecciona una acción…</pre>
+
+  <div class="log-title">Campañas <small style="color:var(--mut)">(investigación → planeación → creación → gate → análisis)</small></div>
+  <form id="camp-form">
+    <input id="c-objetivo" placeholder="objetivo (ej. Lanzar presencia de Café X en Monterrey)" required style="flex:1;min-width:280px">
+    <input id="c-marca" placeholder="marca" style="width:140px">
+    <input id="c-ciudad" placeholder="ciudad" style="width:140px">
+    <input id="c-audiencia" placeholder="audiencia" style="width:160px">
+    <select id="c-plats"><option value="instagram">instagram</option><option value="facebook">facebook</option><option value="tiktok">tiktok</option><option value="todas">todas</option></select>
+    <input id="c-tono" placeholder="tono" value="profesional" style="width:110px">
+    <input id="c-pres" type="number" placeholder="$" value="0" style="width:90px">
+    <input id="c-dias" type="number" placeholder="días" value="7" style="width:70px">
+    <button class="btn" type="submit">Lanzar campaña</button>
+    <button class="btn ghost" type="button" onclick="listarCampanas()">Actualizar</button>
+  </form>
+  <table>
+    <thead><tr><th>ID</th><th>Objetivo</th><th>Estado</th><th>Inicio</th><th></th></tr></thead>
+    <tbody id="camp-tbody"></tbody>
+  </table>
+  <div class="log-title">Resultado de campaña</div>
+  <pre id="camp-out">Sin seleccionar…</pre>
 </main>
 
 <script>
@@ -163,7 +183,55 @@ document.getElementById('cmd-form').addEventListener('submit', async e=>{
   }catch(err){ log('Error: '+err.message); }
 });
 
+const CAMP_OUT = document.getElementById('camp-out');
+function camplog(obj){ CAMP_OUT.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); }
+
+async function listarCampanas(){
+  try{
+    const arr = await req('/api/campanas');
+    const tb = document.getElementById('camp-tbody');
+    if(!arr.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">Sin campañas</td></tr>'; return; }
+    tb.innerHTML = arr.map(c=>`
+      <tr>
+        <td><small>${c.id}</small></td>
+        <td>${c.objetivo||''}</td>
+        <td>${c.estado}</td>
+        <td><small>${c.inicio||'—'}</small></td>
+        <td><button class="btn sm ghost" onclick="verCampana('${c.id}')">Ver</button></td>
+      </tr>`).join('');
+  }catch(e){ camplog('Error: '+e.message); }
+}
+
+async function verCampana(id){
+  try{
+    const j = await req(`/api/campanas/${id}`);
+    if(j.resultado && j.resultado.etapas && j.resultado.etapas['4_exposicion']){
+      const ex = j.resultado.etapas['4_exposicion'];
+      camplog({estado: j.estado, exposicion: ex, _nota: 'El gate de exposición lo aprueba solo la Directora Humana.'});
+    } else camplog(j.resultado || j);
+  }catch(e){ camplog('Error: '+e.message); }
+}
+
+document.getElementById('camp-form').addEventListener('submit', async e=>{
+  e.preventDefault();
+  try{
+    const body = { objetivo: document.getElementById('c-objetivo').value,
+      marca: document.getElementById('c-marca').value, ciudad: document.getElementById('c-ciudad').value,
+      plataformas: document.getElementById('c-plats').value, audiencia: document.getElementById('c-audiencia').value,
+      tono: document.getElementById('c-tono').value || 'profesional',
+      presupuesto: Number(document.getElementById('c-pres').value||0),
+      periodo_dias: Number(document.getElementById('c-dias').value||7) };
+    if(!confirm('¿Lanzar campaña? Tarda decenas de minutos y usa los modelos.')) return;
+    const j = await req('/api/campanas', {method:'POST', body: JSON.stringify(body)});
+    camplog('Lanzada: '+j.id+' (actualiza la lista para ver avance)');
+    listarCampanas();
+  }catch(err){ camplog('Error: '+err.message); }
+});
+
+setInterval(()=>{ if(document.getElementById('camp-tbody').rows.length) listarCampanas(); }, 30000);
+
 cargar();
+listarCampanas();
 </script>
 </body>
 </html>

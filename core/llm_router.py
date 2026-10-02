@@ -36,8 +36,10 @@ def _build_ollama_client():
     from openai import OpenAI
     base = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1")
     model = os.getenv("LOCAL_LLM_MODEL", "qwen3:4b")
+    # Timeout amplio: las campañas generan dossieres largos en CPU local (NEM/lento
+    # puede tardar varios minutos); 60s cortaba generaciones válidas.
     try:
-        client = OpenAI(base_url=base, api_key="not-needed", timeout=60)
+        client = OpenAI(base_url=base, api_key="not-needed", timeout=600)
     except Exception:
         client = None
     return client, model
@@ -158,7 +160,7 @@ def _get_ollama_local() -> LLM:
         api_key="not-needed",
         temperature=0.01,   # determinista para tool-calling estable
         top_p=0.9,
-        timeout=120,
+        timeout=600,  # igual que el fallback: dossieres largos en CPU lenta
         max_tokens=2048,
     )
 

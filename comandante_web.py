@@ -16,8 +16,11 @@ import sys
 import json
 import shutil
 import subprocess
+import threading
 import urllib.request
 import getpass
+import uuid
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import FileResponse
@@ -76,6 +79,17 @@ class ArchivoBody(BaseModel):
     destino_remoto: str
 
 
+class CampanaBody(BaseModel):
+    objetivo: str
+    ciudad: str = ""
+    marca: str = ""
+    plataformas: str = "instagram"
+    audiencia: str = ""
+    tono: str = "profesional"
+    presupuesto: float = 0
+    periodo_dias: int = 7
+
+
 # --- API ------------------------------------------------------------------
 @app.get("/api/arboles")
 def api_listar(x_comandante_token: str | None = Header(default=None)):
@@ -118,6 +132,87 @@ def api_upgrade(arbol_id: str, body: UpgradeBody, x_comandante_token: str | None
 def api_archivo(arbol_id: str, body: ArchivoBody, x_comandante_token: str | None = Header(default=None)):
     _authorize(x_comandante_token)
     return json.loads(propagar_archivo(arbol_id, body.origen_local, body.destino_remoto))
+
+
+# --- Campañas (orquestador en segundo plano) ----------------------------------
+# Lanza ejecutar_campana (5 etapas CrewAI, tarda decenas de minutos) en un hilo
+# para no bloquear el panel. El resultado se guarda en shared/campanas/{id}.json.
+# La etapa de exposición crea un gate en db.Aprobacion (solo lo aprueba la Directora).
+
+_CAMPANAS: dict = {}
+_CAMP_DIR = os.path.join(HERE, "shared", "campanas")
+
+
+def _campana_guardar(job: dict):
+    try:
+        os.makedirs(_CAMP_DIR, exist_ok=True)
+        with open(os.path.join(_CAMP_DIR, job["id"] + ".json"), "w", encoding="utf-8") as f:
+            json.dump(job, f, ensure_ascii=False, indent=2, default=str)
+    except Exception:
+        pass
+
+
+def _campana_run(job_id: str, objetivo: str, inputs: dict):
+    from orquestador.campana import ejecutar_campana
+    job = _CAMPANAS.get(job_id, {})
+    try:
+        job["estado"] = "en_curso"
+        job["inicio"] = datetime.now().isoformat(timespec="seconds")
+        res = ejecutar_campana(objetivo, inputs)
+        job["estado"] = str(res.get("estado", "terminada"))
+        job["resultado"] = res
+        job["fin"] = datetime.now().isoformat(timespec="seconds")
+    except Exception as e:
+        job["estado"] = "error"
+        job["error"] = str(e)[:500]
+        job["fin"] = datetime.now().isoformat(timespec="seconds")
+    _campana_guardar(job)
+
+
+@app.post("/api/campanas")
+def api_campana_lanzar(body: CampanaBody, x_comandante_token: str | None = Header(default=None)):
+    """Lanza una campaña completa en segundo plano. Devuelve el id del trabajo."""
+    _authorize(x_comandante_token)
+    objetivo = (body.objetivo or "").strip()
+    if not objetivo:
+        raise HTTPException(status_code=400, detail="objetivo requerido")
+    # Tope de historial: conserva activas, descarta terminadas más viejas.
+    if len(_CAMPANAS) >= 20:
+        viejas = sorted([j for j in _CAMPANAS.values() if j["estado"] not in ("en_curso", "en_cola")],
+                        key=lambda j: j["id"])[:len(_CAMPANAS) - 19]
+        for j in viejas:
+            _CAMPANAS.pop(j["id"], None)
+    job_id = uuid.uuid4().hex[:8]
+    inputs = {"ciudad": body.ciudad, "marca": body.marca, "plataformas": body.plataformas,
+              "audiencia": body.audiencia, "tono": body.tono, "presupuesto": body.presupuesto,
+              "periodo_dias": body.periodo_dias, "metricas_json": "{}"}
+    _CAMPANAS[job_id] = {"id": job_id, "objetivo": objetivo, "inputs": inputs,
+                         "estado": "en_cola", "inicio": None, "fin": None}
+    t = threading.Thread(target=_campana_run, args=(job_id, objetivo, inputs), daemon=True)
+    t.start()
+    return {"id": job_id, "estado": "en_cola", "objetivo": objetivo}
+
+
+@app.get("/api/campanas")
+def api_campanas_listar(x_comandante_token: str | None = Header(default=None)):
+    """Lista trabajos (sin el resultado completo; ver detalle por id)."""
+    _authorize(x_comandante_token)
+    return [{k: j.get(k) for k in ("id", "objetivo", "estado", "inicio", "fin", "error")}
+            for j in sorted(_CAMPANAS.values(), key=lambda j: j["id"], reverse=True)]
+
+
+@app.get("/api/campanas/{job_id}")
+def api_campana_detalle(job_id: str, x_comandante_token: str | None = Header(default=None)):
+    """Detalle + resultado de una campaña."""
+    _authorize(x_comandante_token)
+    job = _CAMPANAS.get(job_id)
+    if job is None:
+        try:
+            with open(os.path.join(_CAMP_DIR, job_id + ".json"), encoding="utf-8") as f:
+                job = json.load(f)
+        except Exception:
+            raise HTTPException(status_code=404, detail="campaña no encontrada")
+    return job
 
 
 # --- Salud de sesión y reinicio seguro --------------------------------------

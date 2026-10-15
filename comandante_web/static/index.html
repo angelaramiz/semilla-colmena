@@ -3,235 +3,183 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comandante — Mente Colmena</title>
-<style>
-  :root{--bg:#0f1115;--card:#1a1e26;--line:#2a2f3a;--txt:#e6e8ee;--mut:#8b93a3;--ok:#2ecc71;--off:#e74c3c;--unk:#f39c12;}
-  *{box-sizing:border-box}
-  body{margin:0;font-family:system-ui,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--txt)}
-  header{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
-  header h1{font-size:18px;margin:0}
-  header .rol{font-size:11px;background:#333a49;padding:3px 8px;border-radius:20px;color:var(--mut)}
-  main{padding:24px;max-width:1100px;margin:0 auto}
-  .bar{display:flex;gap:10px;align-items:center;margin-bottom:16px}
-  .btn{background:#2b5cff;color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-size:13px}
-  .btn:hover{filter:brightness(1.1)}
-  .btn.ghost{background:#2a2f3a}
-  .btn.sm{padding:5px 10px;font-size:12px}
-  .btn.danger{background:#c0392b}
-  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
-  th,td{padding:10px 12px;text-align:left;font-size:13px;border-bottom:1px solid var(--line)}
-  th{color:var(--mut);font-weight:600;background:#161a21}
-  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
-  .st-online{background:var(--ok)} .st-offline{background:var(--off)} .st-desconocido{background:var(--unk)}
-  .cell-actions{display:flex;gap:6px;flex-wrap:wrap}
-  pre{background:#0b0d11;border:1px solid var(--line);padding:12px;border-radius:8px;overflow:auto;max-height:280px;font-size:12px;white-space:pre-wrap}
-  .log-title{font-weight:600;margin:18px 0 6px;color:var(--mut)}
-  form{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
-  input,select{background:#12151c;border:1px solid var(--line);color:var(--txt);padding:8px 10px;border-radius:8px;font-size:13px}
-  .empty{color:var(--mut);padding:24px;text-align:center}
-</style>
+<title>Comandante — Resumen operativo</title>
+<link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
-<header>
-  <h1>🐝 Comandante</h1>
-  <span class="rol">Mente colmena · control de árboles</span>
-</header>
-<main>
-  <div class="bar">
-    <button class="btn" onclick="cargar()">↻ Actualizar</button>
-    <input id="token" placeholder="X-Comandante-Token (si está definido)" style="flex:1;max-width:320px">
-  </div>
-
-  <div style="background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-      <b>🛟 Salud de sesión</b>
-      <button class="btn sm ghost" onclick="salud()">Verificar</button>
-      <button class="btn sm danger" onclick="reinicioSeguro()" style="margin-left:auto">⏻ Preparar reinicio</button>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="brand-mark">C</span><span class="brand-name">Comandante</span></a>
+    <span class="brand-sub">Mente colmena · control de árboles</span>
+    <nav class="nav" aria-label="Navegación principal">
+      <a href="/" data-route="/">Resumen</a>
+      <a href="/arboles" data-route="/arboles">Árboles</a>
+      <a href="/campanas" data-route="/campanas">Campañas</a>
+    </nav>
+    <div class="tokenbox">
+      <label for="token">Token de acceso</label>
+      <input id="token" type="password" placeholder="Solo si el panel lo exige" autocomplete="off">
     </div>
-    <div id="salud" style="font-size:13px;color:var(--mut)">Sin verificar.</div>
+  </div>
+</header>
+
+<main>
+  <div class="page-head">
+    <div>
+      <h2>Resumen operativo</h2>
+      <p>Estado del comandante, salud de esta sesión y actividad reciente de campañas. Todo a primera vista.</p>
+    </div>
+    <div class="spacer"></div>
+    <div class="btn-row">
+      <button class="btn secondary" id="btn-actualizar" type="button">Actualizar</button>
+      <a class="btn ghost" href="/arboles">Gestionar árboles</a>
+      <a class="btn" href="/campanas">Nueva campaña</a>
+    </div>
   </div>
 
-  <form id="reg-form">
-    <input id="r-id" placeholder="arbol_id" required>
-    <input id="r-host" placeholder="host (tailnet.ts.net / IP)" required style="flex:2">
-    <input id="r-user" placeholder="usuario" value="root">
-    <input id="r-puerto" type="number" placeholder="puerto" value="22" style="width:90px">
-    <select id="r-canal"><option value="ssh">ssh</option><option value="tailscale">tailscale</option></select>
-    <button class="btn" type="submit">+ Registrar árbol</button>
-  </form>
+  <div class="grid cols-3" id="kpi-grid">
+    <div class="card">
+      <h3>Árboles registrados</h3>
+      <div class="big" id="kpi-arboles">—</div>
+      <p class="sub" id="kpi-arboles-sub">Sin cargar.</p>
+    </div>
+    <div class="card">
+      <h3>Árboles en línea</h3>
+      <div class="big" id="kpi-linea">—</div>
+      <p class="sub" id="kpi-linea-sub">Según último estado conocido.</p>
+    </div>
+    <div class="card">
+      <h3>Campañas en curso</h3>
+      <div class="big" id="kpi-campanas">—</div>
+      <p class="sub" id="kpi-campanas-sub">En cola o en curso ahora mismo.</p>
+    </div>
+  </div>
 
-  <table>
-    <thead><tr><th>Árbol</th><th>Host</th><th>Canal</th><th>Estado</th><th>Acciones</th></tr></thead>
-    <tbody id="tbody"></tbody>
-  </table>
+  <div class="grid cols-2" style="margin-top:14px">
+    <section class="card" aria-label="Salud de la sesión">
+      <h3>Salud de la sesión</h3>
+      <div class="btn-row" style="margin:8px 0 6px">
+        <button class="btn danger sm" id="btn-reinicio" type="button">Preparar reinicio seguro</button>
+      </div>
+      <div id="salud-body">
+        <div class="notice">Salud de la sesión (se actualiza con el botón Actualizar de arriba).</div>
+      </div>
+    </section>
 
-  <div class="log-title">Consola de comandos</div>
-  <form id="cmd-form">
-    <input id="cmd-arbol" placeholder="arbol_id" required style="width:180px">
-    <input id="cmd-texto" placeholder="comando (ej. uptime)" required style="flex:1">
-    <button class="btn" type="submit">Ejecutar</button>
-  </form>
+    <section class="card" aria-label="Actividad reciente de campañas">
+      <h3>Actividad reciente de campañas</h3>
+      <div id="camp-recientes" style="margin-top:6px">
+        <div class="notice">Cargando campañas…</div>
+      </div>
+    </section>
+  </div>
 
-  <div class="log-title">Resultado</div>
-  <pre id="out">Selecciona una acción…</pre>
-
-  <div class="log-title">Campañas <small style="color:var(--mut)">(investigación → planeación → creación → gate → análisis)</small></div>
-  <form id="camp-form">
-    <input id="c-objetivo" placeholder="objetivo (ej. Lanzar presencia de Café X en Monterrey)" required style="flex:1;min-width:280px">
-    <input id="c-marca" placeholder="marca" style="width:140px">
-    <input id="c-ciudad" placeholder="ciudad" style="width:140px">
-    <input id="c-audiencia" placeholder="audiencia" style="width:160px">
-    <select id="c-plats"><option value="instagram">instagram</option><option value="facebook">facebook</option><option value="tiktok">tiktok</option><option value="todas">todas</option></select>
-    <input id="c-tono" placeholder="tono" value="profesional" style="width:110px">
-    <input id="c-pres" type="number" placeholder="$" value="0" style="width:90px">
-    <input id="c-dias" type="number" placeholder="días" value="7" style="width:70px">
-    <button class="btn" type="submit">Lanzar campaña</button>
-    <button class="btn ghost" type="button" onclick="listarCampanas()">Actualizar</button>
-  </form>
-  <table>
-    <thead><tr><th>ID</th><th>Objetivo</th><th>Estado</th><th>Inicio</th><th></th></tr></thead>
-    <tbody id="camp-tbody"></tbody>
-  </table>
-  <div class="log-title">Resultado de campaña</div>
-  <pre id="camp-out">Sin seleccionar…</pre>
+  <div class="footer">Panel del Comandante · solo lectura salvo acciones confirmadas · el gate de exposición siempre lo aprueba la Directora Humana.</div>
 </main>
+<div id="toast" role="status"></div>
 
+<script src="/static/app.js"></script>
 <script>
-const OUT = document.getElementById('out');
-function hd(){ return { 'X-Comandante-Token': document.getElementById('token').value } }
-function log(obj){ OUT.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); }
+(function () {
+  "use strict";
+  var C = window.Comandante;
 
-async function req(url, opts={}){
-  opts.headers = Object.assign({}, hd(), opts.headers || {});
-  if (opts.body) opts.headers['Content-Type'] = 'application/json';
-  const r = await fetch(url, opts);
-  const j = await r.json().catch(()=>({raw:await r.text()}));
-  if (!r.ok) throw new Error((j.detail||r.status));
-  return j;
-}
+  function pintarSalud(s) {
+    var el = document.getElementById("salud-body");
+    var estadoTs = s.tailscale.controlado
+      ? '<span class="dot ok"></span>Controlado por esta sesión'
+      : (s.tailscale.dueno
+        ? '<span class="dot err"></span>Gestionado por <strong>' + C.esc(s.tailscale.dueno) + "</strong> — no emitir up/login aquí"
+        : '<span class="dot warn"></span>' + C.esc(s.tailscale.detalle || "Sin estado"));
+    var tareas = Object.keys(s.tareas || {}).length
+      ? Object.keys(s.tareas).map(function (k) {
+          return '<div class="rowline"><span class="k">' + C.esc(k) + '</span><span>' +
+            (s.tareas[k] ? '<span class="dot ok"></span>activa' : '<span class="dot"></span>inactiva') + "</span></div>";
+        }).join("")
+      : '<div class="rowline"><span class="k">Tareas programadas</span><span>No disponible en esta plataforma</span></div>';
+    var desc = (s.descargas_medias && s.descargas_medias.length)
+      ? s.descargas_medias.map(function (d) { return C.esc(d.archivo) + " (" + C.esc(d.mb) + " MB)"; }).join(", ")
+      : "Ninguna";
+    el.innerHTML =
+      '<div class="rowline"><span class="k">Usuario del panel</span><span><strong>' + C.esc(s.usuario_panel) + "</strong></span></div>" +
+      '<div class="rowline"><span class="k">Tailscale</span><span>' + estadoTs + "</span></div>" +
+      '<div class="rowline"><span class="k">Ollama local</span><span>' +
+        (s.ollama ? '<span class="dot ok"></span>Disponible' : '<span class="dot err"></span>Apagado o inaccesible') + "</span></div>" +
+      '<div class="rowline"><span class="k">Disco libre</span><span>' + (s.disco ? C.esc(s.disco.libre_gb) + " GB" : "Desconocido") + "</span></div>" +
+      '<div class="rowline"><span class="k">Descargas a medias</span><span>' + C.esc(desc) + "</span></div>" +
+      tareas +
+      (s.conflicto_cuentas
+        ? '<div class="notice danger" style="margin-bottom:0"><strong>Conflicto de cuentas:</strong> Tailscale lo gestiona ' +
+          C.esc(s.tailscale.dueno) + ". No emitas up/login desde aquí. Para reiniciar usa «Preparar reinicio seguro».</div>"
+        : "");
+  }
 
-async function cargar(){
-  try{
-    const arr = await req('/api/arboles');
-    const tb = document.getElementById('tbody');
-    if(!arr.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">Sin árboles registrados</td></tr>'; return; }
-    tb.innerHTML = arr.map(a=>`
-      <tr>
-        <td><b>${a.arbol_id}</b><br><small style="color:var(--mut)">${a.nombre||''}</small></td>
-        <td>${a.host}:${a.puerto}</td>
-        <td>${a.canal}</td>
-        <td><span class="dot st-${a.estado}"></span>${a.estado}</td>
-        <td class="cell-actions">
-          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','ping')">Ping</button>
-          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','estado')">Estado</button>
-          <button class="btn sm ghost" onclick="accion('${a.arbol_id}','upgrade')">Upgrade</button>
-        </td>
-      </tr>`).join('');
-  }catch(e){ log('Error al cargar: '+e.message); }
-}
+  async function cargarSalud() {
+    var el = document.getElementById("salud-body");
+    el.innerHTML = '<div class="notice">Verificando salud de la sesión…</div>';
+    try {
+      var s = await C.req("/api/salud_sesion");
+      pintarSalud(s);
+    } catch (e) {
+      el.innerHTML = '<div class="notice danger"><strong>No se pudo verificar.</strong> ' + C.esc(e.message) + "</div>";
+    }
+  }
 
-async function accion(id, tipo){
-  try{
-    if(tipo==='upgrade'){ if(!confirm('Propagar upgrade git a '+id+'?')) return; }
-    const j = await req(`/api/arboles/${id}/${tipo}`, {method:'POST', body: JSON.stringify(tipo==='upgrade'?{rama:'main'}:{})});
-    log(j);
-    cargar();
-  }catch(e){ log('Error: '+e.message); }
-}
+  async function cargarResumen() {
+    try {
+      var arboles = await C.req("/api/arboles");
+      var enLinea = arboles.filter(function (a) { return a.estado === "online"; }).length;
+      document.getElementById("kpi-arboles").textContent = String(arboles.length);
+      document.getElementById("kpi-arboles-sub").textContent =
+        arboles.length ? "Registrados en este comandante." : "Aún no hay árboles. Regístralos en la vista Árboles.";
+      document.getElementById("kpi-linea").textContent = String(enLinea);
+      document.getElementById("kpi-linea-sub").textContent =
+        arboles.length ? "De " + arboles.length + " registrados." : "Sin árboles que supervisar.";
+    } catch (e) {
+      document.getElementById("kpi-arboles").textContent = "—";
+      document.getElementById("kpi-arboles-sub").textContent = "Error al cargar: " + e.message;
+      C.toast("No se pudieron cargar los árboles: " + e.message, true);
+    }
+    try {
+      var camps = await C.req("/api/campanas");
+      var activas = camps.filter(function (c) { return c.estado === "en_curso" || c.estado === "en_cola"; }).length;
+      document.getElementById("kpi-campanas").textContent = String(activas);
+      document.getElementById("kpi-campanas-sub").textContent =
+        camps.length ? activas + " activas de " + camps.length + " en historial." : "Aún no hay campañas lanzadas.";
+      var box = document.getElementById("camp-recientes");
+      if (!camps.length) {
+        box.innerHTML = '<div class="empty"><strong>Sin campañas todavía</strong>Lanza la primera desde la vista Campañas. Tarda decenas de minutos.</div>';
+      } else {
+        box.innerHTML = camps.slice(0, 5).map(function (c) {
+          return '<div class="rowline"><span><strong>' + C.esc(c.objetivo || "(sin objetivo)") +
+            '</strong><br><span class="mono" style="color:var(--muted)">' + C.esc(c.id) + " · " + C.esc(C.shortTime(c.inicio)) +
+            '</span></span><span>' + C.badgeFor(c.estado) + "</span></div>";
+        }).join("");
+      }
+    } catch (e) {
+      document.getElementById("kpi-campanas").textContent = "—";
+      document.getElementById("camp-recientes").innerHTML =
+        '<div class="notice danger"><strong>No se pudieron cargar las campañas.</strong> ' + C.esc(e.message) + "</div>";
+    }
+  }
 
-async function salud(){
-  const el = document.getElementById('salud');
-  el.textContent = 'Verificando…';
-  try{
-    const s = await req('/api/salud_sesion');
-    const dot = s.conflicto_cuentas ? '🔴' : '🟢';
-    const tareas = Object.entries(s.tareas||{}).map(([k,v])=>`${k}:${v?'sí':'no'}`).join(' · ') || 'n/a';
-    const desc = (s.descargas_medias||[]).map(d=>`${d.archivo} (${d.mb} MB)`).join(', ') || 'ninguna';
-    el.innerHTML = `${dot} Panel como <b>${s.usuario_panel}</b> · Tailscale: ${s.tailscale.disponible?(s.tailscale.controlado?'controlado por esta sesión':'de <b>'+s.tailscale.dueno+'</b>'):'no disponible'}`
-      + `<br>Tareas: ${tareas} · Disco libre: ${s.disco?s.disco.libre_gb+' GB':'?'} · Ollama: ${s.ollama?'OK':'apagado'}`
-      + `<br>Descargas a medias: ${desc}`
-      + (s.conflicto_cuentas?'<br>⚠️ <b>No emitas up/login de Tailscale desde aquí</b> (lo gestiona '+s.tailscale.dueno+'). Para reiniciar usa “Preparar reinicio”.':'');
-  }catch(e){ el.textContent = 'Error: '+e.message; }
-}
+  async function reinicioSeguro() {
+    if (!confirm("¿Preparar reinicio seguro?\n\nDetiene descargas parciales y el servicio ArbolWeb. Este panel seguirá activo.")) return;
+    try {
+      var j = await C.req("/api/reinicio_seguro", { method: "POST", body: "{}" });
+      C.toast("Reinicio preparado: " + (j.acciones || []).join(" · "));
+      cargarSalud();
+    } catch (e) { C.toast("Error: " + e.message, true); }
+  }
 
-async function reinicioSeguro(){
-  if(!confirm('¿Detener descargas y ArbolWeb para un reinicio limpio? (Este panel sigue activo)')) return;
-  try{
-    const j = await req('/api/reinicio_seguro', {method:'POST', body:'{}'});
-    log(j);
-  }catch(e){ log('Error: '+e.message); }
-}
+  document.getElementById("btn-reinicio").addEventListener("click", reinicioSeguro);
+  document.getElementById("btn-actualizar").addEventListener("click", function () {
+    cargarResumen(); cargarSalud();
+  });
 
-document.getElementById('reg-form').addEventListener('submit', async e=>{
-  e.preventDefault();
-  try{
-    const body = { arbol_id: document.getElementById('r-id').value, host: document.getElementById('r-host').value,
-      usuario: document.getElementById('r-user').value, puerto: Number(document.getElementById('r-puerto').value),
-      canal: document.getElementById('r-canal').value };
-    const j = await req('/api/arboles', {method:'POST', body: JSON.stringify(body)});
-    log(j); cargar();
-  }catch(err){ log('Error: '+err.message); }
-});
-
-document.getElementById('cmd-form').addEventListener('submit', async e=>{
-  e.preventDefault();
-  try{
-    const id = document.getElementById('cmd-arbol').value;
-    const comando = document.getElementById('cmd-texto').value;
-    const j = await req(`/api/arboles/${id}/comando`, {method:'POST', body: JSON.stringify({comando})});
-    log(j);
-  }catch(err){ log('Error: '+err.message); }
-});
-
-const CAMP_OUT = document.getElementById('camp-out');
-function camplog(obj){ CAMP_OUT.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2); }
-
-async function listarCampanas(){
-  try{
-    const arr = await req('/api/campanas');
-    const tb = document.getElementById('camp-tbody');
-    if(!arr.length){ tb.innerHTML = '<tr><td colspan="5" class="empty">Sin campañas</td></tr>'; return; }
-    tb.innerHTML = arr.map(c=>`
-      <tr>
-        <td><small>${c.id}</small></td>
-        <td>${c.objetivo||''}</td>
-        <td>${c.estado}</td>
-        <td><small>${c.inicio||'—'}</small></td>
-        <td><button class="btn sm ghost" onclick="verCampana('${c.id}')">Ver</button></td>
-      </tr>`).join('');
-  }catch(e){ camplog('Error: '+e.message); }
-}
-
-async function verCampana(id){
-  try{
-    const j = await req(`/api/campanas/${id}`);
-    if(j.resultado && j.resultado.etapas && j.resultado.etapas['4_exposicion']){
-      const ex = j.resultado.etapas['4_exposicion'];
-      camplog({estado: j.estado, exposicion: ex, _nota: 'El gate de exposición lo aprueba solo la Directora Humana.'});
-    } else camplog(j.resultado || j);
-  }catch(e){ camplog('Error: '+e.message); }
-}
-
-document.getElementById('camp-form').addEventListener('submit', async e=>{
-  e.preventDefault();
-  try{
-    const body = { objetivo: document.getElementById('c-objetivo').value,
-      marca: document.getElementById('c-marca').value, ciudad: document.getElementById('c-ciudad').value,
-      plataformas: document.getElementById('c-plats').value, audiencia: document.getElementById('c-audiencia').value,
-      tono: document.getElementById('c-tono').value || 'profesional',
-      presupuesto: Number(document.getElementById('c-pres').value||0),
-      periodo_dias: Number(document.getElementById('c-dias').value||7) };
-    if(!confirm('¿Lanzar campaña? Tarda decenas de minutos y usa los modelos.')) return;
-    const j = await req('/api/campanas', {method:'POST', body: JSON.stringify(body)});
-    camplog('Lanzada: '+j.id+' (actualiza la lista para ver avance)');
-    listarCampanas();
-  }catch(err){ camplog('Error: '+err.message); }
-});
-
-setInterval(()=>{ if(document.getElementById('camp-tbody').rows.length) listarCampanas(); }, 30000);
-
-cargar();
-listarCampanas();
+  cargarResumen();
+  cargarSalud();
+})();
 </script>
 </body>
 </html>

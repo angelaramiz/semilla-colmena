@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comandante — Campañas</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="brand-mark">C</span><span class="brand-name">Comandante</span></a>
+    <span class="brand-sub">Mente colmena · control de árboles</span>
+    <nav class="nav" aria-label="Navegación principal">
+      <a href="/" data-route="/">Resumen</a>
+      <a href="/arboles" data-route="/arboles">Árboles</a>
+      <a href="/campanas" data-route="/campanas">Campañas</a>
+    </nav>
+    <div class="tokenbox">
+      <label for="token">Token de acceso</label>
+      <input id="token" type="password" placeholder="Solo si el panel lo exige" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="page-head">
+    <div>
+      <h2>Campañas</h2>
+      <p>Lanza una campaña guiada (investigación, planeación, creación, gate y análisis) y sigue su avance. El proceso tarda decenas de minutos.</p>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn secondary" id="btn-actualizar" type="button">Actualizar lista</button>
+  </div>
+
+  <fieldset>
+    <legend>Lanzar campaña nueva</legend>
+    <div class="steps" aria-label="Pasos">
+      <div class="on" data-step-tab="1"><span class="n">1</span>Objetivo y marca</div>
+      <div data-step-tab="2"><span class="n">2</span>Público y canales</div>
+      <div data-step-tab="3"><span class="n">3</span>Revisar y lanzar</div>
+    </div>
+    <form id="camp-form">
+      <div class="step-pane on" data-step-pane="1">
+        <div class="form-grid">
+          <label class="field full">Objetivo de la campaña
+            <input id="c-objetivo" required placeholder="p. ej. Lanzar la presencia de Café X en Monterrey" autocomplete="off">
+          </label>
+          <label class="field">Marca
+            <input id="c-marca" placeholder="p. ej. Café X" autocomplete="off">
+          </label>
+          <label class="field">Ciudad
+            <input id="c-ciudad" placeholder="p. ej. Monterrey" autocomplete="off">
+          </label>
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn secondary" type="button" data-next="2">Continuar</button>
+        </div>
+      </div>
+      <div class="step-pane" data-step-pane="2">
+        <div class="form-grid">
+          <label class="field">Audiencia
+            <input id="c-audiencia" placeholder="p. ej. jóvenes profesionales" autocomplete="off">
+          </label>
+          <label class="field">Plataformas
+            <select id="c-plats">
+              <option value="instagram">Instagram</option>
+              <option value="facebook">Facebook</option>
+              <option value="tiktok">TikTok</option>
+              <option value="todas">Todas</option>
+            </select>
+          </label>
+          <label class="field">Tono
+            <select id="c-tono">
+              <option value="profesional">Profesional</option>
+              <option value="cercano">Cercano</option>
+              <option value="audaz">Audaz</option>
+              <option value="formal">Formal</option>
+            </select>
+          </label>
+          <label class="field">Presupuesto (MXN)
+            <input id="c-pres" type="number" value="0" min="0" step="100">
+          </label>
+          <label class="field">Duración (días)
+            <input id="c-dias" type="number" value="7" min="1" max="90">
+          </label>
+        </div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn ghost" type="button" data-next="1">Atrás</button>
+          <button class="btn secondary" type="button" data-next="3">Revisar</button>
+        </div>
+      </div>
+      <div class="step-pane" data-step-pane="3">
+        <div class="notice" id="resumen-lanzar">Completa los pasos anteriores para ver el resumen.</div>
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn ghost" type="button" data-next="2">Atrás</button>
+          <button class="btn" type="submit" id="btn-lanzar">Lanzar campaña</button>
+        </div>
+      </div>
+    </form>
+  </fieldset>
+
+  <div class="section-title">Trabajos de campaña <span class="muted">· se actualiza solo cada 30 s</span></div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>ID</th><th>Objetivo</th><th>Estado</th><th>Inicio</th><th></th></tr></thead>
+      <tbody id="camp-tbody">
+        <tr><td colspan="5" class="empty">Cargando…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section-title">Resultado de la campaña <span class="muted" id="visor-id"></span></div>
+  <div id="gate-box"></div>
+  <pre class="output" id="camp-out" style="max-height:420px">Selecciona «Ver» en un trabajo para inspeccionar su resultado.</pre>
+</main>
+<div id="toast" role="status"></div>
+
+<script src="/static/app.js"></script>
+<script>
+(function () {
+  "use strict";
+  var C = window.Comandante;
+  var OUT = document.getElementById("camp-out");
+
+  function irPaso(n) {
+    document.querySelectorAll("[data-step-pane]").forEach(function (p) {
+      p.classList.toggle("on", p.getAttribute("data-step-pane") === String(n));
+    });
+    document.querySelectorAll("[data-step-tab]").forEach(function (t) {
+      t.classList.toggle("on", t.getAttribute("data-step-tab") === String(n));
+    });
+    if (String(n) === "3") actualizarResumen();
+  }
+  document.querySelectorAll("[data-next]").forEach(function (b) {
+    b.addEventListener("click", function () { irPaso(b.getAttribute("data-next")); });
+  });
+
+  function valores() {
+    return {
+      objetivo: document.getElementById("c-objetivo").value.trim(),
+      marca: document.getElementById("c-marca").value.trim(),
+      ciudad: document.getElementById("c-ciudad").value.trim(),
+      audiencia: document.getElementById("c-audiencia").value.trim(),
+      plataformas: document.getElementById("c-plats").value,
+      tono: document.getElementById("c-tono").value,
+      presupuesto: Number(document.getElementById("c-pres").value || 0),
+      periodo_dias: Number(document.getElementById("c-dias").value || 7)
+    };
+  }
+  function actualizarResumen() {
+    var v = valores();
+    document.getElementById("resumen-lanzar").innerHTML =
+      "<strong>Revisa antes de lanzar:</strong> «" + (C.esc(v.objetivo) || "—sin objetivo—") + "»" +
+      "<br>Marca: " + C.esc(v.marca || "—") + " · Ciudad: " + C.esc(v.ciudad || "—") +
+      " · Audiencia: " + C.esc(v.audiencia || "—") +
+      "<br>Plataformas: " + C.esc(v.plataformas) + " · Tono: " + C.esc(v.tono) +
+      " · Presupuesto: " + C.esc(v.presupuesto) + " · Duración: " + C.esc(v.periodo_dias) + " días" +
+      "<br>El proceso corre en segundo plano y tarda decenas de minutos. Podrás seguirlo en la lista de abajo.";
+  }
+
+  function pintarGate(job) {
+    var box = document.getElementById("gate-box");
+    var res = job.resultado || {};
+    var expo = res.etapas && res.etapas["4_exposicion"];
+    if (expo) {
+      var txt = (typeof expo === "string") ? expo : JSON.stringify(expo, null, 2);
+      box.innerHTML = '<div class="gate" role="alert"><strong>Gate de exposición — requiere aprobación de la Directora Humana</strong>' +
+        "<p>Nada de esta etapa se publica sin su aprobación en el Conservante. Extracto:</p>" +
+        "<pre class=\"output\" style=\"margin-top:8px;max-height:180px\">" + C.esc(txt.slice(0, 1500)) + "</pre></div>";
+    } else if (job.estado === "en_curso" || job.estado === "en_cola") {
+      box.innerHTML = '<div class="notice">Campaña <strong>' + C.esc(job.estado) + '</strong>: el gate de exposición aparecerá aquí cuando la campaña llegue a esa etapa.</div>';
+    } else {
+      box.innerHTML = "";
+    }
+  }
+
+  async function listar() {
+    var tb = document.getElementById("camp-tbody");
+    try {
+      var arr = await C.req("/api/campanas");
+      if (!arr.length) {
+        tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>Sin campañas todavía</strong>Completa el formulario de arriba para lanzar la primera.</div></td></tr>';
+        return;
+      }
+      tb.innerHTML = arr.map(function (c) {
+        return "<tr><td><span class=\"mono\">" + C.esc(c.id) + "</span></td>" +
+          "<td>" + C.esc(c.objetivo || "") + (c.error ? "<br><small>Error: " + C.esc(c.error) + "</small>" : "") + "</td>" +
+          "<td>" + C.badgeFor(c.estado) + "</td>" +
+          "<td><small>" + C.esc(C.shortTime(c.inicio)) + "</small></td>" +
+          '<td><button class="btn sm ghost" type="button" data-ver="' + C.esc(c.id) + '">Ver</button></td></tr>";
+      }).join("");
+      tb.querySelectorAll("button[data-ver]").forEach(function (b) {
+        b.addEventListener("click", function () { ver(b.getAttribute("data-ver")); });
+      });
+    } catch (e) {
+      tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>No se pudo cargar la lista</strong>' + C.esc(e.message) + "</div></td></tr>";
+    }
+  }
+
+  async function ver(id) {
+    OUT.textContent = "Cargando campaña " + id + "…";
+    document.getElementById("visor-id").textContent = "· " + id;
+    try {
+      var j = await C.req("/api/campanas/" + encodeURIComponent(id));
+      pintarGate(j);
+      var base = j.resultado || j;
+      OUT.textContent = (typeof base === "string") ? base : JSON.stringify(base, null, 2);
+    } catch (e) { OUT.textContent = "Error: " + e.message; }
+  }
+
+  document.getElementById("camp-form").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var v = valores();
+    if (!v.objetivo) { C.toast("Escribe el objetivo de la campaña antes de lanzar.", true); irPaso(1); return; }
+    if (!confirm("¿Lanzar campaña?\n\n«" + v.objetivo + "»\nTarda decenas de minutos y usa los modelos configurados.")) return;
+    try {
+      var btn = document.getElementById("btn-lanzar");
+      btn.disabled = true;
+      var j = await C.req("/api/campanas", { method: "POST", body: JSON.stringify(v) });
+      C.toast("Campaña lanzada con ID " + j.id + ".");
+      OUT.textContent = "Lanzada con ID " + j.id + ". Pulsa «Ver» en la lista para seguir su avance.";
+      document.getElementById("visor-id").textContent = "· " + j.id;
+      listar();
+    } catch (err) { C.toast("Error al lanzar: " + err.message, true); }
+    finally { document.getElementById("btn-lanzar").disabled = false; }
+  });
+
+  document.getElementById("btn-actualizar").addEventListener("click", listar);
+
+  setInterval(function () {
+    var tb = document.getElementById("camp-tbody");
+    if (tb && tb.querySelector("button[data-ver]")) listar();
+  }, 30000);
+
+  listar();
+})();
+</script>
+</body>
+</html>

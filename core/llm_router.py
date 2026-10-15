@@ -45,8 +45,18 @@ def _build_ollama_client():
     return client, model
 
 
+def _es_reintentable(e) -> str | None:
+    """429 (rate limit) o 404 de modelo muerto (los :free rotan a pago sin aviso)."""
+    code = getattr(e, "status_code", None)
+    if code == 429:
+        return "429"
+    if code == 404:
+        return "404"
+    return None
+
+
 def _make_retry_wrapper(orig_create, models: list, log_fn, fallback=None):
-    """Devuelve un wrapper (sync o async) que rota de modelo ante 429 y cae a Ollama local."""
+    """Devuelve un wrapper (sync o async) que rota de modelo ante 429/404 y cae a Ollama local."""
     fclient, fmodel = fallback if fallback else (None, None)
 
     if inspect.iscoroutinefunction(orig_create):
@@ -58,9 +68,10 @@ def _make_retry_wrapper(orig_create, models: list, log_fn, fallback=None):
                 try:
                     return await orig_create(**kw)
                 except Exception as e:
-                    if getattr(e, "status_code", None) == 429:
-                        log_fn(f"429 en {model}; rotando a {models[i + 1]}" if i < len(models) - 1
-                               else f"429 en {model}; OpenRouter agotado")
+                    motivo = _es_reintentable(e)
+                    if motivo:
+                        log_fn(f"{motivo} en {model}; rotando a {models[i + 1]}" if i < len(models) - 1
+                               else f"{motivo} en {model}; OpenRouter agotado")
                         await asyncio.sleep(2)
                         last = e
                         continue
@@ -81,9 +92,10 @@ def _make_retry_wrapper(orig_create, models: list, log_fn, fallback=None):
             try:
                 return orig_create(**kw)
             except Exception as e:
-                if getattr(e, "status_code", None) == 429:
-                    log_fn(f"429 en {model}; rotando a {models[i + 1]}" if i < len(models) - 1
-                           else f"429 en {model}; OpenRouter agotado")
+                motivo = _es_reintentable(e)
+                if motivo:
+                    log_fn(f"{motivo} en {model}; rotando a {models[i + 1]}" if i < len(models) - 1
+                           else f"{motivo} en {model}; OpenRouter agotado")
                     time.sleep(2)
                     last = e
                     continue

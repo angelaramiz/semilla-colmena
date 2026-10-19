@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Comandante — Monitoreo</title>
+<link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="/"><span class="brand-mark">C</span><span class="brand-name">Comandante</span></a>
+    <span class="brand-sub">Tablero de ramas</span>
+    <nav class="nav" aria-label="Navegación principal">
+      <a href="/" data-route="/">Resumen</a>
+      <a href="/arboles" data-route="/arboles">Árboles</a>
+      <a href="/campanas" data-route="/campanas">Campañas</a>
+      <a href="/monitoreo" data-route="/monitoreo">Monitoreo</a>
+    </nav>
+    <div class="tokenbox">
+      <label for="token">Token de acceso</label>
+      <input id="token" type="password" placeholder="Solo si el panel lo exige" autocomplete="off">
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="page-head">
+    <div>
+      <h2>Monitoreo de ramas</h2>
+      <p>Estado en vivo del puente, último evento por rama y gates pendientes de la Directora. Se actualiza cada 10 s.</p>
+    </div>
+    <div class="spacer"></div>
+    <span id="puente-estado" class="pill">puente: …</span>
+    <button class="btn secondary" id="btn-actualizar" type="button">Actualizar ahora</button>
+  </div>
+
+  <h3>Ramas</h3>
+  <div id="ramas" class="cards"></div>
+
+  <h3>Gates pendientes <span id="gates-count" class="pill">0</span></h3>
+  <div id="gates"></div>
+</main>
+
+<script src="/static/app.js"></script>
+<script src="/static/monitoreo.js"></script>
+</body>
+</html>

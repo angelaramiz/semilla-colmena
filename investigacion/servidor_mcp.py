@@ -25,6 +25,8 @@ from html.parser import HTMLParser
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 
+from core.ejecutar import run_seguro, verificar as _verificar_binario
+
 ORQ_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(ORQ_DIR)
 if PROJECT_ROOT not in sys.path:
@@ -85,7 +87,8 @@ def _dump_dom(url: str, espera_ms: int = 8000) -> str:
     if not nav:
         return json.dumps({"error": "sin navegador del sistema"}, ensure_ascii=False)
     try:
-        p = subprocess.run(
+        _verificar_binario(nav)  # hook: solo Chrome/Edge del sistema
+        p = run_seguro(
             [nav, "--headless=new", "--no-sandbox", "--disable-gpu",
              "--virtual-time-budget=%d" % espera_ms, "--dump-dom", url],
             capture_output=True, text=True, encoding="utf-8",

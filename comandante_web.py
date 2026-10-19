@@ -28,6 +28,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from db import init_db, listar_arboles as db_listar_arboles, registrar_arbol as db_registrar_arbol
+from db import crear_aprobacion as db_crear_aprobacion, listar_aprobaciones as db_listar_aprobaciones
+from db import resolver_aprobacion as db_resolver_aprobacion
 from comunicacion.comandante_mcp import (
     ping_arbol, estado_arbol, ejecutar_comando, propagar_upgrade, propagar_archivo,
 )
@@ -357,6 +359,92 @@ def api_reinicio_seguro(x_comandante_token: str | None = Header(default=None)):
 @app.get("/")
 def index():
     return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+
+
+@app.get("/arboles")
+def pagina_arboles():
+    return FileResponse(os.path.join(STATIC_DIR, "arboles.html"))
+
+
+@app.get("/campanas")
+def pagina_campanas():
+    return FileResponse(os.path.join(STATIC_DIR, "campanas.html"))
+
+
+@app.get("/monitoreo")
+def pagina_monitoreo():
+    return FileResponse(os.path.join(STATIC_DIR, "monitoreo.html"))
+
+
+# --- Monitoreo de ramas (tablero) --------------------------------------
+PUENTE_URL = os.getenv("PUENTE_URL", "http://127.0.0.1:4210").rstrip("/")
+
+
+def _puente_get(ruta: str, timeout: int = 15):
+    try:
+        req = urllib.request.Request(PUENTE_URL + ruta)
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
+@app.get("/api/monitoreo")
+def api_monitoreo(x_comandante_token: str | None = Header(default=None)):
+    _authorize(x_comandante_token)
+    estado = _puente_get("/estado")
+    pendientes = []
+    try:
+        pendientes = db_listar_aprobaciones("agencia", estado="pendiente")
+    except Exception:
+        pendientes = []
+    return {"puente": PUENTE_URL, "estado": estado, "gates_pendientes": pendientes}
+
+
+class AprobacionBody(BaseModel):
+    tipo: str = "gate"
+    detalle: str = ""
+    borrador: str = ""
+
+
+class ResolverBody(BaseModel):
+    decision: str = "aprobada"
+    feedback: str = ""
+
+
+@app.get("/api/aprobaciones")
+def api_aprobaciones_listar(x_comandante_token: str | None = Header(default=None)):
+    _authorize(x_comandante_token)
+    try:
+        return {"pendientes": db_listar_aprobaciones("agencia", estado="pendiente")}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@app.post("/api/aprobaciones")
+def api_aprobacion_crear(body: AprobacionBody, x_comandante_token: str | None = Header(default=None)):
+    _authorize(x_comandante_token)
+    try:
+        return db_crear_aprobacion("agencia", body.tipo, body.detalle, body.borrador)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@app.post("/api/aprobaciones/{aprobacion_id}/resolver")
+def api_aprobacion_resolver(aprobacion_id: int, body: ResolverBody,
+                            x_comandante_token: str | None = Header(default=None)):
+    _authorize(x_comandante_token)
+    if body.decision not in ("aprobada", "rechazada"):
+        raise HTTPException(status_code=400, detail="decision: aprobada|rechazada")
+    try:
+        r = db_resolver_aprobacion(aprobacion_id, body.decision, body.feedback)
+        if r is None:
+            raise HTTPException(status_code=404, detail="no existe")
+        return r
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
 
 
 if os.path.isdir(STATIC_DIR):

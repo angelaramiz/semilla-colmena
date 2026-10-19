@@ -13,9 +13,21 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 AGENCIA = os.path.dirname(AQUI)  # raiz del repo agencia (agen_mrk)
+if AGENCIA not in sys.path:
+    sys.path.insert(0, AGENCIA)
 PY_AGENCIA = os.path.join(AGENCIA, ".venv", "Scripts", "python.exe")
 TOKEN = os.environ.get("PUENTE_TOKEN", "").strip()
 MEM_USUARIO = os.environ.get("MEMORIA_USUARIO", "directora")
+
+from core.ejecutar import run_seguro, PopenSeguro
+ARRANQUE = __import__("time").time()
+
+# Registro de runs para el tablero de monitoreo: run_id -> {rama, inicio, estado}.
+RUNS: dict = {}
+# Último evento por rama para el tablero.
+ULTIMOS: dict = {}
+# Ramas cuyo entregable requiere gate de Directora antes de usarse.
+REQUIEREN_GATE = {"redes", "atencion_cliente", "contenido", "planeacion"}
 
 # Matriz de trabajo orquestado (docs/MATRIZ-ORQUESTACION.md):
 # cada rama expone su evento de salida/error y a quién transfiere.
@@ -65,8 +77,8 @@ def _ev(tipo: str, **kw) -> str:
 def _memoria(args: list) -> str:
     """Llama a scripts/memoria.py (modo local). Nunca rompe el run."""
     try:
-        r = subprocess.run([PY_AGENCIA, os.path.join(AGENCIA, "scripts", "memoria.py")] + args,
-                           cwd=AGENCIA, capture_output=True, text=True, timeout=300)
+        r = run_seguro([PY_AGENCIA, os.path.join(AGENCIA, "scripts", "memoria.py")] + args,
+                       cwd=AGENCIA, capture_output=True, text=True, timeout=300)
         return (r.stdout or "").strip()
     except Exception as e:
         return "[memoria no disponible: %s]" % str(e)[:100]
@@ -75,6 +87,22 @@ def _memoria(args: list) -> str:
 @app.get("/health")
 def health():
     return {"ok": True, "harness": "colmena-orquestador"}
+
+
+@app.get("/estado")
+def estado():
+    """Tablero: qué corre ahora + último evento por rama."""
+    import time
+    return {"ok": True, "uptime_s": round(time.time() - ARRANQUE),
+            "runs": RUNS, "ultimos": ULTIMOS,
+            "ramas": list(RAMAS.keys())}
+
+
+@app.get("/ultimo/{nombre}")
+def ultimo(nombre: str):
+    if nombre not in RAMAS:
+        return JSONResponse({"error": "rama desconocida: %s" % nombre}, status_code=404)
+    return {"rama": nombre, "ultimo": ULTIMOS.get(nombre)}
 
 
 @app.post("/ag-ui")
@@ -105,7 +133,7 @@ async def ag_ui(req: Request):
         else:
             instruccion_full = instruccion
         try:
-            p = subprocess.Popen(
+            p = PopenSeguro(
                 [PY_AGENCIA, "main.py", "--orquestador", "--modo", "local", "-i", instruccion_full],
                 cwd=AGENCIA, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                 text=True, encoding="utf-8", errors="replace", bufsize=1,
@@ -165,6 +193,8 @@ async def ag_ui_rama(nombre: str, req: Request):
         return StreamingResponse(_vacio(), media_type="text/event-stream")
 
     def _gen():
+        import time
+        RUNS[run_id] = {"rama": nombre, "inicio": time.strftime("%H:%M:%S"), "estado": "trabajando"}
         yield _ev("RUN_STARTED", threadId=thread_id, runId=run_id)
         mid = "m-" + run_id
         yield _ev("TEXT_MESSAGE_START", messageId=mid, role="assistant")
@@ -179,7 +209,7 @@ async def ag_ui_rama(nombre: str, req: Request):
         entregable = ""
         dentro = False
         try:
-            p = subprocess.Popen(
+            p = PopenSeguro(
                 [PY_AGENCIA, "main.py", "--rama", nombre,
                  "--inputs", json.dumps(inputs, ensure_ascii=False),
                  "--modo", "local"],
@@ -205,6 +235,8 @@ async def ag_ui_rama(nombre: str, req: Request):
                 evento = {"evento": spec["ev_err"], "rama": nombre,
                           "error": "rama terminó con código %d" % rc,
                           "reintento": False, "siguiente": "orquestador"}
+                RUNS[run_id]["estado"] = "error"
+                ULTIMOS[nombre] = evento
                 yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                           delta="\n" + json.dumps(evento, ensure_ascii=False) + "\n")
             else:
@@ -213,7 +245,12 @@ async def ag_ui_rama(nombre: str, req: Request):
                           "-u", MEM_USUARIO])
                 evento = {"evento": spec["ev_ok"], "rama": nombre,
                           "resultado": entregable.strip(),
-                          "memoria_guardada": True, "siguiente": spec["siguiente"]}
+                          "memoria_guardada": True, "siguiente": spec["siguiente"],
+                          "requiere_gate": nombre in REQUIEREN_GATE}
+                RUNS[run_id]["estado"] = "entregado"
+                ULTIMOS[nombre] = {"evento": evento["evento"], "siguiente": evento["siguiente"],
+                                   "requiere_gate": evento["requiere_gate"],
+                                   "resumen": entregable.strip()[:300]}
                 yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                           delta="\n" + entregable.strip() + "\n" +
                           json.dumps(evento, ensure_ascii=False) + "\n")
@@ -221,10 +258,13 @@ async def ag_ui_rama(nombre: str, req: Request):
             evento = {"evento": spec["ev_err"], "rama": nombre,
                       "error": str(e)[:200], "reintento": False,
                       "siguiente": "orquestador"}
+            RUNS[run_id]["estado"] = "error"
+            ULTIMOS[nombre] = evento
             yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                       delta="\n" + json.dumps(evento, ensure_ascii=False) + "\n")
         yield _ev("TEXT_MESSAGE_END", messageId=mid)
         yield _ev("RUN_FINISHED", threadId=thread_id, runId=run_id)
+        RUNS.pop(run_id, None)
     return StreamingResponse(_gen(), media_type="text/event-stream")
 
 

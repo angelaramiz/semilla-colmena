@@ -1,20 +1,21 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comandante — Campañas</title>
+<title>Comandante â€” CampaÃ±as</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="/"><span class="brand-mark">C</span><span class="brand-name">Comandante</span></a>
-    <span class="brand-sub">Mente colmena · control de árboles</span>
-    <nav class="nav" aria-label="Navegación principal">
+    <span class="brand-sub">Mente colmena Â· control de Ã¡rboles</span>
+    <nav class="nav" aria-label="NavegaciÃ³n principal">
       <a href="/" data-route="/">Resumen</a>
-      <a href="/arboles" data-route="/arboles">Árboles</a>
-      <a href="/campanas" data-route="/campanas">Campañas</a>
+      <a href="/arboles" data-route="/arboles">Ãrboles</a>
+      <a href="/campanas" data-route="/campanas">CampaÃ±as</a>
+      <a href="/monitoreo" data-route="/monitoreo">Monitoreo</a>
     </nav>
     <div class="tokenbox">
       <label for="token">Token de acceso</label>
@@ -26,28 +27,28 @@
 <main>
   <div class="page-head">
     <div>
-      <h2>Campañas</h2>
-      <p>Lanza una campaña guiada (investigación, planeación, creación, gate y análisis) y sigue su avance. El proceso tarda decenas de minutos.</p>
+      <h2>CampaÃ±as</h2>
+      <p>Lanza una campaÃ±a guiada (investigaciÃ³n, planeaciÃ³n, creaciÃ³n, gate y anÃ¡lisis) y sigue su avance. El proceso tarda decenas de minutos.</p>
     </div>
     <div class="spacer"></div>
     <button class="btn secondary" id="btn-actualizar" type="button">Actualizar lista</button>
   </div>
 
   <fieldset>
-    <legend>Lanzar campaña nueva</legend>
+    <legend>Lanzar campaÃ±a nueva</legend>
     <div class="steps" aria-label="Pasos">
       <div class="on" data-step-tab="1"><span class="n">1</span>Objetivo y marca</div>
-      <div data-step-tab="2"><span class="n">2</span>Público y canales</div>
+      <div data-step-tab="2"><span class="n">2</span>PÃºblico y canales</div>
       <div data-step-tab="3"><span class="n">3</span>Revisar y lanzar</div>
     </div>
     <form id="camp-form">
       <div class="step-pane on" data-step-pane="1">
         <div class="form-grid">
-          <label class="field full">Objetivo de la campaña
-            <input id="c-objetivo" required placeholder="p. ej. Lanzar la presencia de Café X en Monterrey" autocomplete="off">
+          <label class="field full">Objetivo de la campaÃ±a
+            <input id="c-objetivo" required placeholder="p. ej. Lanzar la presencia de CafÃ© X en Monterrey" autocomplete="off">
           </label>
           <label class="field">Marca
-            <input id="c-marca" placeholder="p. ej. Café X" autocomplete="off">
+            <input id="c-marca" placeholder="p. ej. CafÃ© X" autocomplete="off">
           </label>
           <label class="field">Ciudad
             <input id="c-ciudad" placeholder="p. ej. Monterrey" autocomplete="off">
@@ -60,7 +61,7 @@
       <div class="step-pane" data-step-pane="2">
         <div class="form-grid">
           <label class="field">Audiencia
-            <input id="c-audiencia" placeholder="p. ej. jóvenes profesionales" autocomplete="off">
+            <input id="c-audiencia" placeholder="p. ej. jÃ³venes profesionales" autocomplete="off">
           </label>
           <label class="field">Plataformas
             <select id="c-plats">
@@ -81,38 +82,38 @@
           <label class="field">Presupuesto (MXN)
             <input id="c-pres" type="number" value="0" min="0" step="100">
           </label>
-          <label class="field">Duración (días)
+          <label class="field">DuraciÃ³n (dÃ­as)
             <input id="c-dias" type="number" value="7" min="1" max="90">
           </label>
         </div>
         <div class="btn-row" style="margin-top:12px">
-          <button class="btn ghost" type="button" data-next="1">Atrás</button>
+          <button class="btn ghost" type="button" data-next="1">AtrÃ¡s</button>
           <button class="btn secondary" type="button" data-next="3">Revisar</button>
         </div>
       </div>
       <div class="step-pane" data-step-pane="3">
         <div class="notice" id="resumen-lanzar">Completa los pasos anteriores para ver el resumen.</div>
         <div class="btn-row" style="margin-top:12px">
-          <button class="btn ghost" type="button" data-next="2">Atrás</button>
-          <button class="btn" type="submit" id="btn-lanzar">Lanzar campaña</button>
+          <button class="btn ghost" type="button" data-next="2">AtrÃ¡s</button>
+          <button class="btn" type="submit" id="btn-lanzar">Lanzar campaÃ±a</button>
         </div>
       </div>
     </form>
   </fieldset>
 
-  <div class="section-title">Trabajos de campaña <span class="muted">· se actualiza solo cada 30 s</span></div>
+  <div class="section-title">Trabajos de campaÃ±a <span class="muted">Â· se actualiza solo cada 30 s</span></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>ID</th><th>Objetivo</th><th>Estado</th><th>Inicio</th><th></th></tr></thead>
       <tbody id="camp-tbody">
-        <tr><td colspan="5" class="empty">Cargando…</td></tr>
+        <tr><td colspan="5" class="empty">Cargandoâ€¦</td></tr>
       </tbody>
     </table>
   </div>
 
-  <div class="section-title">Resultado de la campaña <span class="muted" id="visor-id"></span></div>
+  <div class="section-title">Resultado de la campaÃ±a <span class="muted" id="visor-id"></span></div>
   <div id="gate-box"></div>
-  <pre class="output" id="camp-out" style="max-height:420px">Selecciona «Ver» en un trabajo para inspeccionar su resultado.</pre>
+  <pre class="output" id="camp-out" style="max-height:420px">Selecciona Â«VerÂ» en un trabajo para inspeccionar su resultado.</pre>
 </main>
 <div id="toast" role="status"></div>
 
@@ -151,12 +152,12 @@
   function actualizarResumen() {
     var v = valores();
     document.getElementById("resumen-lanzar").innerHTML =
-      "<strong>Revisa antes de lanzar:</strong> «" + (C.esc(v.objetivo) || "—sin objetivo—") + "»" +
-      "<br>Marca: " + C.esc(v.marca || "—") + " · Ciudad: " + C.esc(v.ciudad || "—") +
-      " · Audiencia: " + C.esc(v.audiencia || "—") +
-      "<br>Plataformas: " + C.esc(v.plataformas) + " · Tono: " + C.esc(v.tono) +
-      " · Presupuesto: " + C.esc(v.presupuesto) + " · Duración: " + C.esc(v.periodo_dias) + " días" +
-      "<br>El proceso corre en segundo plano y tarda decenas de minutos. Podrás seguirlo en la lista de abajo.";
+      "<strong>Revisa antes de lanzar:</strong> Â«" + (C.esc(v.objetivo) || "â€”sin objetivoâ€”") + "Â»" +
+      "<br>Marca: " + C.esc(v.marca || "â€”") + " Â· Ciudad: " + C.esc(v.ciudad || "â€”") +
+      " Â· Audiencia: " + C.esc(v.audiencia || "â€”") +
+      "<br>Plataformas: " + C.esc(v.plataformas) + " Â· Tono: " + C.esc(v.tono) +
+      " Â· Presupuesto: " + C.esc(v.presupuesto) + " Â· DuraciÃ³n: " + C.esc(v.periodo_dias) + " dÃ­as" +
+      "<br>El proceso corre en segundo plano y tarda decenas de minutos. PodrÃ¡s seguirlo en la lista de abajo.";
   }
 
   function pintarGate(job) {
@@ -165,11 +166,11 @@
     var expo = res.etapas && res.etapas["4_exposicion"];
     if (expo) {
       var txt = (typeof expo === "string") ? expo : JSON.stringify(expo, null, 2);
-      box.innerHTML = '<div class="gate" role="alert"><strong>Gate de exposición — requiere aprobación de la Directora Humana</strong>' +
-        "<p>Nada de esta etapa se publica sin su aprobación en el Conservante. Extracto:</p>" +
+      box.innerHTML = '<div class="gate" role="alert"><strong>Gate de exposiciÃ³n â€” requiere aprobaciÃ³n de la Directora Humana</strong>' +
+        "<p>Nada de esta etapa se publica sin su aprobaciÃ³n en el Conservante. Extracto:</p>" +
         "<pre class=\"output\" style=\"margin-top:8px;max-height:180px\">" + C.esc(txt.slice(0, 1500)) + "</pre></div>";
     } else if (job.estado === "en_curso" || job.estado === "en_cola") {
-      box.innerHTML = '<div class="notice">Campaña <strong>' + C.esc(job.estado) + '</strong>: el gate de exposición aparecerá aquí cuando la campaña llegue a esa etapa.</div>';
+      box.innerHTML = '<div class="notice">CampaÃ±a <strong>' + C.esc(job.estado) + '</strong>: el gate de exposiciÃ³n aparecerÃ¡ aquÃ­ cuando la campaÃ±a llegue a esa etapa.</div>';
     } else {
       box.innerHTML = "";
     }
@@ -180,7 +181,7 @@
     try {
       var arr = await C.req("/api/campanas");
       if (!arr.length) {
-        tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>Sin campañas todavía</strong>Completa el formulario de arriba para lanzar la primera.</div></td></tr>';
+        tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>Sin campaÃ±as todavÃ­a</strong>Completa el formulario de arriba para lanzar la primera.</div></td></tr>';
         return;
       }
       tb.innerHTML = arr.map(function (c) {
@@ -199,8 +200,8 @@
   }
 
   async function ver(id) {
-    OUT.textContent = "Cargando campaña " + id + "…";
-    document.getElementById("visor-id").textContent = "· " + id;
+    OUT.textContent = "Cargando campaÃ±a " + id + "â€¦";
+    document.getElementById("visor-id").textContent = "Â· " + id;
     try {
       var j = await C.req("/api/campanas/" + encodeURIComponent(id));
       pintarGate(j);
@@ -212,15 +213,15 @@
   document.getElementById("camp-form").addEventListener("submit", async function (e) {
     e.preventDefault();
     var v = valores();
-    if (!v.objetivo) { C.toast("Escribe el objetivo de la campaña antes de lanzar.", true); irPaso(1); return; }
-    if (!confirm("¿Lanzar campaña?\n\n«" + v.objetivo + "»\nTarda decenas de minutos y usa los modelos configurados.")) return;
+    if (!v.objetivo) { C.toast("Escribe el objetivo de la campaÃ±a antes de lanzar.", true); irPaso(1); return; }
+    if (!confirm("Â¿Lanzar campaÃ±a?\n\nÂ«" + v.objetivo + "Â»\nTarda decenas de minutos y usa los modelos configurados.")) return;
     try {
       var btn = document.getElementById("btn-lanzar");
       btn.disabled = true;
       var j = await C.req("/api/campanas", { method: "POST", body: JSON.stringify(v) });
-      C.toast("Campaña lanzada con ID " + j.id + ".");
-      OUT.textContent = "Lanzada con ID " + j.id + ". Pulsa «Ver» en la lista para seguir su avance.";
-      document.getElementById("visor-id").textContent = "· " + j.id;
+      C.toast("CampaÃ±a lanzada con ID " + j.id + ".");
+      OUT.textContent = "Lanzada con ID " + j.id + ". Pulsa Â«VerÂ» en la lista para seguir su avance.";
+      document.getElementById("visor-id").textContent = "Â· " + j.id;
       listar();
     } catch (err) { C.toast("Error al lanzar: " + err.message, true); }
     finally { document.getElementById("btn-lanzar").disabled = false; }

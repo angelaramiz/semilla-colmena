@@ -117,3 +117,20 @@ Error:
   Rellenan todos los `{campos}` (CrewAI los exige; los no provistos van vacíos).
 - Probado end-to-end: `atencion_cliente` → `RESPUESTA_LISTA` + `RUN_FINISHED`
   + memoria guardada y recuperada (score 0.719).
+
+## Tablero + hooks (2026-10-19)
+
+- Tablero: `GET /monitoreo` en comandante (`:8001`) con tarjetas por rama
+  (estado idle/trabajando/último evento), auto-refresh 10s, botones
+  Pedir gate / Aprobar / Rechazar. Datos de `GET /api/monitoreo`
+  (puente `/estado` + gates pendientes de `db.Aprobacion`).
+- Puente: registro `RUNS`/`ULTIMOS` + `GET /estado`, `GET /ultimo/<rama>`;
+  eventos de ramas en `REQUIEREN_GATE` llevan `requiere_gate: true`.
+- Hook de ejecución: `core/ejecutar.py` (allowlist de binarios, shell=False
+  forzado). Lo usan el puente (`run_seguro`/`PopenSeguro`) y el navegador
+  de investigación (`_verificar_binario`).
+- Gates: `POST/GET /api/aprobaciones` + `POST /api/aprobaciones/<id>/resolver`
+  (solo Directora). Verificado: crear → pendiente → aprobada.
+- Investigación web directa: `buscar_web` (Bing primario, DDG respaldo,
+  Chrome headless del sistema, sin keys) + `leer_pagina`; competencia y
+  tendencias con datos reales; prohibido inventar URLs/fuentes.

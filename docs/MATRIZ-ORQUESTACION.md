@@ -121,8 +121,12 @@ Adaptación de la hoja de ruta (jefe → encargados → trabajadores):
   allowlist de chats). Comandos: texto libre → Orquestador, /estado, /gates,
   /aprobar <id>, /rechazar <id>. Requiere `TELEGRAM_BOT_TOKEN` (BotFather) +
   `TELEGRAM_ALLOWED_IDS` del dueño.
-- **FASE 5 prueba de fuego**: pendiente del token. Sin Telegram se puede correr
-  la cadena por el puente (investigación → planeación) como validación técnica.
+- **FASE 5 prueba de fuego (2026-10-19, APROBADA con matices)**: cadena nativa
+  orquestador → investigacion → orquestador → copywriter vía handoffs
+  (grants por API, 7/7 verificados). Tweet final entregado en chat.
+  Matices: el 2.º hop requirió un nudge (el modelo narró en vez de llamar la
+  tool); los runs por handoff no tienen navegador concedido (en chat directo
+  sí navega: Café Limón 4.8★/215 reseñas con screenshot). CrewAI de respaldo.
 
 - Prompts con ROL/FLUJO/eventos en `system_prompts/<rama>.md` de las 7 ramas
   (planeacion, contenido, redes, analitica, investigacion, atencion_cliente)

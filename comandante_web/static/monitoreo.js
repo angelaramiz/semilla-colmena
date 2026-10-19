@@ -1,4 +1,4 @@
-﻿/* Monitoreo de ramas: estado del puente + Ãºltimo evento + gates. */
+/* Monitoreo de ramas: estado del puente + último evento + gates. */
 (function () {
   var NOMBRES = {
     planeacion: "Estratega", contenido: "Copywriter", redes: "Community Manager",
@@ -17,7 +17,7 @@
     var pill = document.getElementById("puente-estado");
     var est = (data && data.estado) || {};
     var ok = est.ok !== false && !est.error;
-    pill.textContent = "puente: " + (ok ? "arriba (" + (est.uptime_s || 0) + " s)" : "caÃ­do");
+    pill.textContent = "puente: " + (ok ? "arriba (" + (est.uptime_s || 0) + " s)" : "caído");
     pill.className = "pill " + (ok ? "ok" : "err");
 
     var ramas = (est.ramas) || Object.keys(NOMBRES);
@@ -32,7 +32,7 @@
       var t = trabajando[r];
       var u = ult[r];
       var estado = t ? ("trabajando desde " + (t.inicio || "?")) :
-        (u ? ("Ãºltimo: " + (u.evento || u.siguiente || "?")) : "idle");
+        (u ? ("último: " + (u.evento || u.siguiente || "?")) : "idle");
       var cls = t ? "warn" : (u ? "ok" : "");
       var det = u && u.resumen ? "<p class='muted'>" + Comandante.esc(u.resumen) + "</p>" : "";
       var gate = (u && u.requiere_gate) ?

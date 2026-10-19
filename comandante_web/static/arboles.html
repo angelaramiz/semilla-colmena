@@ -1,20 +1,20 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comandante â€” Ãrboles</title>
+<title>Comandante — Árboles</title>
 <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
 <header class="topbar">
   <div class="topbar-inner">
     <a class="brand" href="/"><span class="brand-mark">C</span><span class="brand-name">Comandante</span></a>
-    <span class="brand-sub">Mente colmena Â· control de Ã¡rboles</span>
-    <nav class="nav" aria-label="NavegaciÃ³n principal">
+    <span class="brand-sub">Mente colmena · control de árboles</span>
+    <nav class="nav" aria-label="Navegación principal">
       <a href="/" data-route="/">Resumen</a>
-      <a href="/arboles" data-route="/arboles">Ãrboles</a>
-      <a href="/campanas" data-route="/campanas">CampaÃ±as</a>
+      <a href="/arboles" data-route="/arboles">Árboles</a>
+      <a href="/campanas" data-route="/campanas">Campañas</a>
       <a href="/monitoreo" data-route="/monitoreo">Monitoreo</a>
     </nav>
     <div class="tokenbox">
@@ -27,15 +27,15 @@
 <main>
   <div class="page-head">
     <div>
-      <h2>Ãrboles</h2>
-      <p>Registra nodos obreros, comprueba su estado y ejecuta operaciones. <strong>Upgrade</strong> actualiza el cÃ³digo del Ã¡rbol remoto (lento: confirma antes).</p>
+      <h2>Árboles</h2>
+      <p>Registra nodos obreros, comprueba su estado y ejecuta operaciones. <strong>Upgrade</strong> actualiza el código del árbol remoto (lento: confirma antes).</p>
     </div>
     <div class="spacer"></div>
     <button class="btn secondary" id="btn-actualizar" type="button">Actualizar lista</button>
   </div>
 
   <fieldset>
-    <legend>Registrar un Ã¡rbol nuevo</legend>
+    <legend>Registrar un árbol nuevo</legend>
     <form id="reg-form">
       <div class="form-grid">
         <label class="field">Identificador (arbol_id)
@@ -47,8 +47,8 @@
         <label class="field">Canal
           <select id="r-canal"><option value="ssh">ssh</option><option value="tailscale">tailscale</option></select>
         </label>
-        <label class="field full">DirecciÃ³n del host
-          <input id="r-host" required placeholder="nombre-tailnet.ts.net o direcciÃ³n IP" style="flex:2" autocomplete="off">
+        <label class="field full">Dirección del host
+          <input id="r-host" required placeholder="nombre-tailnet.ts.net o dirección IP" style="flex:2" autocomplete="off">
         </label>
         <label class="field">Usuario SSH
           <input id="r-user" value="root" autocomplete="off">
@@ -56,22 +56,22 @@
         <label class="field">Puerto
           <input id="r-puerto" type="number" value="22" min="1" max="65535">
         </label>
-        <label class="field">Carpeta del repo en el Ã¡rbol
+        <label class="field">Carpeta del repo en el árbol
           <input id="r-repo" value="." autocomplete="off">
         </label>
       </div>
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn" type="submit">Registrar Ã¡rbol</button>
+        <button class="btn" type="submit">Registrar árbol</button>
       </div>
     </form>
   </fieldset>
 
-  <div class="section-title">Ãrboles registrados <span class="muted" id="conteo"></span></div>
+  <div class="section-title">Árboles registrados <span class="muted" id="conteo"></span></div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Ãrbol</th><th>Host</th><th>Canal</th><th>Estado</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Árbol</th><th>Host</th><th>Canal</th><th>Estado</th><th>Acciones</th></tr></thead>
       <tbody id="tbody">
-        <tr><td colspan="5" class="empty">Cargandoâ€¦</td></tr>
+        <tr><td colspan="5" class="empty">Cargando…</td></tr>
       </tbody>
     </table>
   </div>
@@ -79,10 +79,10 @@
   <div class="grid cols-2" style="margin-top:14px">
     <section class="card">
       <h3>Consola de comandos</h3>
-      <p class="sub">Ejecuta un comando en el Ã¡rbol elegido y ve la respuesta a la derecha.</p>
+      <p class="sub">Ejecuta un comando en el árbol elegido y ve la respuesta a la derecha.</p>
       <form id="cmd-form" style="margin-top:10px">
         <div class="form-grid" style="grid-template-columns:1fr">
-          <label class="field">Ãrbol destino
+          <label class="field">Árbol destino
             <input id="cmd-arbol" required placeholder="arbol_id" autocomplete="off">
           </label>
           <label class="field">Comando
@@ -93,16 +93,16 @@
           <button class="btn" type="submit">Ejecutar comando</button>
         </div>
       </form>
-      <div class="notice">Los comandos se ejecutan en el Ã¡rbol remoto por el canal privado. Evita comandos interactivos o destructivos.</div>
+      <div class="notice">Los comandos se ejecutan en el árbol remoto por el canal privado. Evita comandos interactivos o destructivos.</div>
     </section>
     <section class="card">
       <h3>Resultado</h3>
-      <p class="sub">Respuesta de la Ãºltima acciÃ³n (ping, estado, comando o upgrade).</p>
-      <div style="margin-top:10px"><pre class="output" id="out">Sin acciones todavÃ­a. Usa Ping o Estado para empezar.</pre></div>
+      <p class="sub">Respuesta de la última acción (ping, estado, comando o upgrade).</p>
+      <div style="margin-top:10px"><pre class="output" id="out">Sin acciones todavía. Usa Ping o Estado para empezar.</pre></div>
     </section>
   </div>
 
-  <div class="footer">El upgrade propaga la rama git al Ã¡rbol remoto. Confirma siempre el identificador antes de lanzarlo.</div>
+  <div class="footer">El upgrade propaga la rama git al árbol remoto. Confirma siempre el identificador antes de lanzarlo.</div>
 </main>
 <div id="toast" role="status"></div>
 
@@ -121,16 +121,16 @@
     var tb = document.getElementById("tbody");
     try {
       var arr = await C.req("/api/arboles");
-      document.getElementById("conteo").textContent = arr.length ? "Â· " + arr.length + " en total" : "";
+      document.getElementById("conteo").textContent = arr.length ? "· " + arr.length + " en total" : "";
       if (!arr.length) {
-        tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>Sin Ã¡rboles registrados</strong>Completa el formulario de arriba para aÃ±adir el primero.</div></td></tr>';
+        tb.innerHTML = '<tr><td colspan="5"><div class="empty"><strong>Sin árboles registrados</strong>Completa el formulario de arriba para añadir el primero.</div></td></tr>';
         return;
       }
       tb.innerHTML = arr.map(function (a) {
         var id = String(a.arbol_id || "");
         var safe = id.replace(/'/g, "\\'");
         return "<tr>" +
-          "<td><strong>" + C.esc(a.arbol_id) + "</strong><br><small>" + C.esc(a.nombre || "â€”") + "</small></td>" +
+          "<td><strong>" + C.esc(a.arbol_id) + "</strong><br><small>" + C.esc(a.nombre || "—") + "</small></td>" +
           "<td>" + C.esc(a.host) + ":" + C.esc(a.puerto) + "<br><small>" + C.esc(a.usuario || "") + "</small></td>" +
           "<td>" + C.esc(a.canal) + "</td>" +
           "<td>" + C.badgeFor(a.estado) + "</td>" +
@@ -157,14 +157,14 @@
     }
     try {
       if (tipo === "upgrade") {
-        if (!confirm("Â¿Propagar upgrade (rama main) al Ã¡rbol Â«" + id + "Â»?\n\nEs una operaciÃ³n lenta sobre el nodo remoto.")) return;
-        mostrar("Enviando upgrade a " + id + "â€¦ (puede tardar)");
+        if (!confirm("¿Propagar upgrade (rama main) al árbol «" + id + "»?\n\nEs una operación lenta sobre el nodo remoto.")) return;
+        mostrar("Enviando upgrade a " + id + "… (puede tardar)");
         var j = await C.req("/api/arboles/" + encodeURIComponent(id) + "/upgrade",
           { method: "POST", body: JSON.stringify({ rama: "main" }) });
         mostrar(j);
         C.toast("Upgrade enviado a " + id + ".");
       } else {
-        mostrar("Consultando " + tipo + " en " + id + "â€¦");
+        mostrar("Consultando " + tipo + " en " + id + "…");
         var r = await C.req("/api/arboles/" + encodeURIComponent(id) + "/" + tipo,
           { method: "POST", body: JSON.stringify({}) });
         mostrar(r);
@@ -189,7 +189,7 @@
     try {
       var j = await C.req("/api/arboles", { method: "POST", body: JSON.stringify(body) });
       mostrar(j);
-      C.toast("Ãrbol Â«" + body.arbol_id + "Â» registrado.");
+      C.toast("Árbol «" + body.arbol_id + "» registrado.");
       e.target.reset();
       document.getElementById("r-user").value = "root";
       document.getElementById("r-puerto").value = "22";
@@ -204,7 +204,7 @@
     var comando = document.getElementById("cmd-texto").value;
     if (!id || !comando) return;
     try {
-      mostrar("Ejecutando en " + id + "â€¦");
+      mostrar("Ejecutando en " + id + "…");
       var j = await C.req("/api/arboles/" + encodeURIComponent(id) + "/comando",
         { method: "POST", body: JSON.stringify({ comando: comando }) });
       mostrar(j);

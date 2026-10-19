@@ -189,7 +189,7 @@
           "<td>" + C.esc(c.objetivo || "") + (c.error ? "<br><small>Error: " + C.esc(c.error) + "</small>" : "") + "</td>" +
           "<td>" + C.badgeFor(c.estado) + "</td>" +
           "<td><small>" + C.esc(C.shortTime(c.inicio)) + "</small></td>" +
-          '<td><button class="btn sm ghost" type="button" data-ver="' + C.esc(c.id) + '">Ver</button></td></tr>";
+          '<td><button class="btn sm ghost" type="button" data-ver="' + C.esc(c.id) + '">Ver</button></td></tr>';
       }).join("");
       tb.querySelectorAll("button[data-ver]").forEach(function (b) {
         b.addEventListener("click", function () { ver(b.getAttribute("data-ver")); });

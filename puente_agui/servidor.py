@@ -24,8 +24,24 @@ ARRANQUE = __import__("time").time()
 
 # Registro de runs para el tablero de monitoreo: run_id -> {rama, inicio, estado}.
 RUNS: dict = {}
-# Último evento por rama para el tablero.
+# Último evento por rama para el tablero (persiste en disco ante reinicios).
 ULTIMOS: dict = {}
+ULTIMOS_JSON = os.path.join(AGENCIA, "shared", "ultimos_ramas.json")
+try:
+    if os.path.exists(ULTIMOS_JSON):
+        with open(ULTIMOS_JSON, "r", encoding="utf-8") as _f:
+            ULTIMOS.update(json.loads(_f.read() or "{}"))
+except Exception:
+    pass
+
+
+def _guardar_ultimos():
+    try:
+        os.makedirs(os.path.dirname(ULTIMOS_JSON), exist_ok=True)
+        with open(ULTIMOS_JSON, "w", encoding="utf-8") as _f:
+            json.dump(ULTIMOS, _f, ensure_ascii=False, indent=1)
+    except Exception:
+        pass
 # Ramas cuyo entregable requiere gate de Directora antes de usarse.
 REQUIEREN_GATE = {"redes", "atencion_cliente", "contenido", "planeacion"}
 
@@ -237,6 +253,7 @@ async def ag_ui_rama(nombre: str, req: Request):
                           "reintento": False, "siguiente": "orquestador"}
                 RUNS[run_id]["estado"] = "error"
                 ULTIMOS[nombre] = evento
+                _guardar_ultimos()
                 yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                           delta="\n" + json.dumps(evento, ensure_ascii=False) + "\n")
             else:
@@ -251,6 +268,7 @@ async def ag_ui_rama(nombre: str, req: Request):
                 ULTIMOS[nombre] = {"evento": evento["evento"], "siguiente": evento["siguiente"],
                                    "requiere_gate": evento["requiere_gate"],
                                    "resumen": entregable.strip()[:300]}
+                _guardar_ultimos()
                 yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                           delta="\n" + entregable.strip() + "\n" +
                           json.dumps(evento, ensure_ascii=False) + "\n")
@@ -260,6 +278,7 @@ async def ag_ui_rama(nombre: str, req: Request):
                       "siguiente": "orquestador"}
             RUNS[run_id]["estado"] = "error"
             ULTIMOS[nombre] = evento
+            _guardar_ultimos()
             yield _ev("TEXT_MESSAGE_CONTENT", messageId=mid,
                       delta="\n" + json.dumps(evento, ensure_ascii=False) + "\n")
         yield _ev("TEXT_MESSAGE_END", messageId=mid)

@@ -395,7 +395,9 @@ def api_monitoreo(x_comandante_token: str | None = Header(default=None)):
     estado = _puente_get("/estado")
     pendientes = []
     try:
-        pendientes = db_listar_aprobaciones("agencia", estado="pendiente")
+        for arbol in ("agencia", "conservante_principal", "cmd_vm_01"):
+            for g in db_listar_aprobaciones(arbol, estado="pendiente"):
+                pendientes.append(g)
     except Exception:
         pendientes = []
     return {"puente": PUENTE_URL, "estado": estado, "gates_pendientes": pendientes}
@@ -416,7 +418,10 @@ class ResolverBody(BaseModel):
 def api_aprobaciones_listar(x_comandante_token: str | None = Header(default=None)):
     _authorize(x_comandante_token)
     try:
-        return {"pendientes": db_listar_aprobaciones("agencia", estado="pendiente")}
+        out = []
+        for arbol in ("agencia", "conservante_principal", "cmd_vm_01"):
+            out.extend(db_listar_aprobaciones(arbol, estado="pendiente"))
+        return {"pendientes": out}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)[:200])
 

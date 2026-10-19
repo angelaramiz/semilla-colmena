@@ -89,6 +89,19 @@ class PersistentMCPClient:
 mcp_client = PersistentMCPClient()
 
 
+@tool("buscar_web_tool")
+def buscar_web_tool(consulta: Annotated[str, "Consulta web"],
+                    ciudad: Annotated[str, "Ciudad"] = "") -> str:
+    """Busca en la web real con el navegador del sistema (sin APIs ni keys)."""
+    return mcp_client.call_tool("buscar_web", {"consulta": consulta, "ciudad": ciudad})
+
+
+@tool("leer_pagina_tool")
+def leer_pagina_tool(url: Annotated[str, "URL a leer"]) -> str:
+    """Lee el texto visible de una URL real para verificar fuentes."""
+    return mcp_client.call_tool("leer_pagina", {"url": url})
+
+
 @tool("buscar_mercado_tool")
 def buscar_mercado_tool(tema: Annotated[str, "Tema de mercado"], ciudad: Annotated[str, "Ciudad"] = "") -> str:
     """Devuelve un dossier de mercado para un tema y ciudad."""
@@ -124,7 +137,8 @@ def setup_crew(modo: str = "local") -> Crew:
               "decisiones de marketing. Solo lectura; produce dossiers."),
         backstory=prompt_inv,
         llm=get_llm(ESTRATEGIA),
-        tools=[buscar_mercado_tool, analizar_competencia_tool, detectar_tendencias_tool],
+        tools=[buscar_web_tool, leer_pagina_tool,
+               buscar_mercado_tool, analizar_competencia_tool, detectar_tendencias_tool],
         verbose=True,
         allow_delegation=False,
     )
@@ -132,12 +146,17 @@ def setup_crew(modo: str = "local") -> Crew:
     tarea = Task(
         description=(
             "Investiga el mercado para: tema='{tema}', ciudad='{ciudad}', categoria='{categoria}'.\n\n"
-            "Pasos:\n"
-            "1. buscar_mercado para el dossier.\n"
-            "2. analizar_competencia para el perfil comparativo.\n"
-            "3. detectar_tendencias para oportunidades.\n"
-            "4. Sintetiza el informe con oportunidades y riesgos.\n\n"
-            "Responde en JSON estricto: {dossier_mercado, competencia, tendencias, oportunidades, riesgos}."
+            "Pasos (web directa, sin placeholders):\n"
+            "1. buscar_web con '{tema} {ciudad}' y con '{categoria} {ciudad} competencia'.\n"
+            "2. leer_pagina de los 2-3 resultados más relevantes para verificar datos.\n"
+            "3. analizar_competencia y detectar_tendencias como apoyo.\n"
+            "4. Sintetiza el informe con oportunidades y riesgos CITANDO las URLs "
+            "reales que leíste (campo fuentes[] con url y dato).\n\n"
+            "PROHIBIDO inventar URLs, nombres de negocios, ratings o cifras: "
+            "cada dato viene de una herramienta o se marca 'sin dato'. "
+            "Si una herramienta devuelve vacío, dilo y trabaja con lo que haya.\n\n"
+            "Responde en JSON estricto: {dossier_mercado, competencia, tendencias, "
+            "oportunidades, riesgos, fuentes}."
         ),
         expected_output="JSON estricto con el informe de investigación, sin markdown envolvente.",
         agent=investigador,

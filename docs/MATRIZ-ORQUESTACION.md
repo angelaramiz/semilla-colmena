@@ -104,7 +104,25 @@ Error:
 4. Idioma: español claro y conciso (memoria: preferencia de Directora).
 5. Secrets solo por variables de entorno; nada en prompts ni eventos.
 
-## Activación (completada 2026-10-18)
+## Reestructura jerárquica (2026-10-19)
+
+Adaptación de la hoja de ruta (jefe → encargados → trabajadores):
+
+- **FASE 1 roles**: prompts con sección `Jerarquia` — Orquestador NUNCA ejecuta
+  (solo delega), Trabajadores NUNCA delegan (el sistema lo prohíbe).
+- **FASE 2 capado**: los bots remotos NO tienen tools en OpenBot (solo endpoint);
+  el enforcement vive en CrewAI (`allow_delegation`: 10× False, 1× True en
+  orquestador) + `core/ejecutar.py` (allowlist binarios). `asistente-marketing`
+  sin skills (antes bot-creator/skill-creator); `conocimiento-agencia` solo
+  lectura. Nada puede publicar/gastar: no existe la herramienta.
+- **FASE 3 canales**: `examples/agencia/channels.yaml` — Orquestador agregado a
+  creacion/inteligencia/atencion (revisa entregables donde trabajan).
+- **FASE 4 Telegram**: `puente_telegram/ceo_bot.py` (polling Bot API, stdlib,
+  allowlist de chats). Comandos: texto libre → Orquestador, /estado, /gates,
+  /aprobar <id>, /rechazar <id>. Requiere `TELEGRAM_BOT_TOKEN` (BotFather) +
+  `TELEGRAM_ALLOWED_IDS` del dueño.
+- **FASE 5 prueba de fuego**: pendiente del token. Sin Telegram se puede correr
+  la cadena por el puente (investigación → planeación) como validación técnica.
 
 - Prompts con ROL/FLUJO/eventos en `system_prompts/<rama>.md` de las 7 ramas
   (planeacion, contenido, redes, analitica, investigacion, atencion_cliente)
@@ -117,6 +135,10 @@ Error:
   Rellenan todos los `{campos}` (CrewAI los exige; los no provistos van vacíos).
 - Probado end-to-end: `atencion_cliente` → `RESPUESTA_LISTA` + `RUN_FINISHED`
   + memoria guardada y recuperada (score 0.719).
+
+## Activación (completada 2026-10-18)
+
+Endpoints, prompts y prueba end-to-end originales.
 
 ## Tablero + hooks (2026-10-19)
 

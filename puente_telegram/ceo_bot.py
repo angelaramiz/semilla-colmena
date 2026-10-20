@@ -40,10 +40,14 @@ def enviar(chat: str, texto: str):
         tg("sendMessage", {"chat_id": chat, "text": texto[i:i + 4000]}, timeout=30)
 
 
-def puente_orquestar(texto: str) -> str:
-    """Manda la orden al Orquestador y junta los deltas SSE en respuesta final."""
+def puente_orquestar(texto: str, contexto: str = "") -> str:
+    """Manda la orden al Orquestador y junta los deltas SSE en respuesta final.
+
+    `contexto` arrastra el historial reciente del chat (plan previo <-> confirmación).
+    """
+    instruccion = (contexto + "\n\nNueva instrucción: " + texto) if contexto else texto
     body = json.dumps({"threadId": "tg-ceo", "runId": "tg-%d" % int(time.time()),
-                       "messages": [{"role": "user", "content": texto}]}).encode()
+                       "messages": [{"role": "user", "content": instruccion}]}).encode()
     req = urllib.request.Request(PUENTE + "/ag-ui", data=body,
                                  headers={"Content-Type": "application/json"})
     partes = []
@@ -63,6 +67,19 @@ def puente_orquestar(texto: str) -> str:
                 if '"evento"' in d and "ORQUESTA" in d:
                     evento_final = d
     texto_full = "".join(partes)
+
+    # Salida limpia: si el run trajo el entregable marcado del Tronco, devuelve
+    # solo esa sección (sin banners de CrewAI).
+    if "ENTREGABLE DEL TRONCO" in texto_full:
+        seg = texto_full.split("ENTREGABLE DEL TRONCO", 1)[1]
+        fin = seg.find("[END_OF_TRONCO")
+        if fin > -1:
+            seg = seg[:fin]
+        limpio = seg.strip()
+        if limpio.startswith("="):
+            limpio = limpio.lstrip("=\n ").lstrip("=").strip()
+        if limpio:
+            return limpio
     # Devuelve el evento final si existe, si no los últimos 3500 chars.
     if evento_final:
         try:
@@ -129,6 +146,21 @@ def cmd_resolver(gid: str, decision: str) -> str:
         return "Error resolviendo gate: %s" % str(e)[:150]
 
 
+HIST: dict = {}  # chat_id -> [(remitente, texto)] — memoria de conversación por chat
+
+
+def _historial(chat: str, nuevo: str | None = None) -> str:
+    """Registro por chat: guarda el nuevo mensaje y devuelve el contexto reciente."""
+    hm = HIST.setdefault(chat, [])
+    if nuevo is not None:
+        hm.append(("ceo", nuevo))
+    ctx = ""
+    if hm:
+        ctx = "Historial reciente de la conversación (más nuevo al final):\n" + "\n".join(
+            "%s: %s" % (q, t[:500]) for q, t in hm[-6:])
+    return ctx
+
+
 def main():
     if not TOKEN or not PERMITIDOS:
         raise SystemExit("Falta TELEGRAM_BOT_TOKEN o TELEGRAM_ALLOWED_IDS")
@@ -161,9 +193,13 @@ def main():
                     enviar(chat, "Soy el control del Orquestador. Mándame la orden en texto.\n"
                                  "Comandos: /estado /gates /aprobar <id> /rechazar <id>")
                 else:
+                    ctx = _historial(chat)
+                    _historial(chat, texto)
                     enviar(chat, "⏳ Orden recibida. La Colmena está ejecutando (1-3 min); "
                                  "te paso el entregable al terminar — no le sockets más comandos hasta ese aviso.")
-                    enviar(chat, puente_orquestar(texto))
+                    respuesta = puente_orquestar(texto, contexto=ctx)
+                    HIST.setdefault(chat, []).append(("tronco", respuesta[:600]))
+                    enviar(chat, respuesta)
         except Exception as e:
             print("[CEO-BOT] error: %s" % str(e)[:200], flush=True)
             time.sleep(5)

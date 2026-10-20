@@ -22,15 +22,15 @@ import shutil
 import urllib.parse
 from html.parser import HTMLParser
 
-from fastmcp import FastMCP
-from dotenv import load_dotenv
-
-from core.ejecutar import run_seguro, verificar as _verificar_binario
-
 ORQ_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(ORQ_DIR)
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+from fastmcp import FastMCP
+from dotenv import load_dotenv
+
+from core.ejecutar import run_seguro, verificar as _verificar_binario
 
 load_dotenv()
 
@@ -304,5 +304,16 @@ if __name__ == "__main__":
             sys.stderr.reconfigure(encoding="utf-8")
         except Exception:
             pass
-    _log("🚀 Servidor MCP de la Rama Investigación iniciado (stdio)")
-    mcp.run()
+    _log("Servidor MCP de la Rama Investigacion iniciado")
+    if "--http" in sys.argv:
+        import argparse
+        ap = argparse.ArgumentParser()
+        ap.add_argument("--http", action="store_true")
+        ap.add_argument("--port", type=int, default=8221)
+        ap.add_argument("--host", default="127.0.0.1")
+        ns = ap.parse_args()
+        _log("HTTP en %s:%d" % (ns.host, ns.port))
+        mcp.run(transport="streamable-http", host=ns.host, port=ns.port)
+    else:
+        _log("modo stdio")
+        mcp.run()

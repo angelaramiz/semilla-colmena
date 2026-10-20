@@ -152,18 +152,30 @@ class _ResultadosBing(HTMLParser):
         self._cur = None
         self._h2 = False
         self._cap = False
+        self._cap_depth = 0
 
     def handle_starttag(self, tag, attrs):
         d = dict(attrs)
         cls = d.get("class", "")
         if tag == "li" and "b_algo" in cls:
             self._cur = {"url": "", "titulo": "", "extracto": ""}
+            self._cap = False
+            self._cap_depth = 0
         elif tag == "h2" and self._cur is not None:
             self._h2 = True
         elif tag == "a" and self._h2 and self._cur is not None:
             self._cur["url"] = _bing_url(d.get("href", ""))
-        elif tag == "p" and self._cur is not None and "b_caption" in cls:
-            self._cap = True
+        elif tag == "div" and self._cur is not None:
+            # 2026-10-20: Bing ahora anida el extracto en
+            # <div class="b_caption"><p class="b_lineclampN">texto</p></div>
+            if "b_caption" in cls and not self._cap:
+                self._cap = True
+                self._cap_depth = 1
+            elif self._cap:
+                self._cap_depth += 1
+        elif tag == "p" and self._cur is not None:
+            if "b_lineclamp" in cls or "b_caption" in cls:
+                self._cap = True
 
     def handle_data(self, data):
         if self._cur is None:
@@ -178,6 +190,10 @@ class _ResultadosBing(HTMLParser):
             self._h2 = False
         elif tag == "p" and self._cap:
             self._cap = False
+        elif tag == "div" and self._cap_depth > 0:
+            self._cap_depth -= 1
+            if self._cap_depth == 0:
+                self._cap = False
         elif tag == "li" and self._cur is not None:
             self._cur["titulo"] = self._cur["titulo"].strip()
             self._cur["extracto"] = self._cur["extracto"][:400].strip()

@@ -132,6 +132,26 @@ def cmd_estado() -> str:
         return "No pude leer el tablero del puente: %s" % str(e)[:150]
 
 
+def _presentar(respuesta: str) -> str:
+    """Si el entregable del Tronco es JSON estricto, muestra solo lo útil al CEO."""
+    try:
+        d = json.loads(respuesta)
+        if isinstance(d, dict) and "entregable" in d:
+            partes = [str(d.get("entregable") or "").strip()]
+            pasos = d.get("proximos_pasos") or []
+            if "esperar_confirmacion_directora" in pasos:
+                partes.append("❓ ¿Confirmas la ejecución? (responde: sí, ejecuta — o los ajustes)")
+            elif pasos:
+                partes.append("Próximos pasos: " + ", ".join(str(p) for p in pasos))
+            if d.get("aprobacion"):
+                partes.append("🚦 Gate pendiente de tu aprobación: %s" % d["aprobacion"])
+            out = "\n".join(p for p in partes if p)
+            return out or respuesta
+    except Exception:
+        pass
+    return respuesta
+
+
 def cmd_resolver(gid: str, decision: str) -> str:
     try:
         body = json.dumps({"decision": decision}).encode()
@@ -198,6 +218,7 @@ def main():
                     enviar(chat, "⏳ Orden recibida. La Colmena está ejecutando (1-3 min); "
                                  "te paso el entregable al terminar — no le sockets más comandos hasta ese aviso.")
                     respuesta = puente_orquestar(texto, contexto=ctx)
+                    respuesta = _presentar(respuesta)
                     HIST.setdefault(chat, []).append(("tronco", respuesta[:600]))
                     enviar(chat, respuesta)
         except Exception as e:

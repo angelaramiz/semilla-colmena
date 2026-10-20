@@ -55,6 +55,9 @@ def rol_de(chat: str) -> str:
     if ROLES:
         return ROLES.get(chat, "conservante")
     return "comandante"  # sin mapeo declarado: permitido orig = comando total
+
+
+ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
 PUENTE = os.environ.get("PUENTE_URL", "http://127.0.0.1:4210").rstrip("/")
 COMANDANTE = os.environ.get("COMANDANTE_URL", "http://127.0.0.1:8001").rstrip("/")
 CTOKEN = os.environ.get("COMANDANTE_WEB_TOKEN", "").strip()
@@ -290,7 +293,7 @@ def _procesar(item: dict) -> str:
     """
     chat, texto = item["chat"], item["texto"]
     rol = rol_de(chat)
-    es_comandante = rol in ("comandante", "ceo")
+    es_comandante = rol in ACCESO_TOTAL
     if texto.startswith("/quiensoy"):
         r = "Tu chat %s tiene rol: %s" % (chat, rol)
     elif texto.startswith("/cola"):

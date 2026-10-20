@@ -21,6 +21,15 @@ Repo indexado (`.codegraph/` + MCP `codegraph`). Antes de `grep`/`find`/glob o l
 - Gitignored y jamás commiteables: `.env`, `semillero/heredado.env`, `*.exe`, `*.db`. Pre-commit `scripts/check_secrets.py` bloquea secretos — todo commit con código sensible pasa su grep antes del push.
 - Micelio nunca modifica un árbol sin el Conservante (`core/mision.py`); los gates críticos (`db.Aprobacion`, `/aprobaciones`) solo los aprueba la Directora Humana.
 
+## 🛡️ Auditoría pre-push (obligatoria, regla 2026-10-20)
+
+Antes de CADA `commit`/`push`, el agente ejecuta y reporta:
+1. `uv run python scripts/check_secrets.py` (debe decir OK; si falla, no commitear).
+2. `git status --short` + `git ls-files | grep .env` — ningún `.env`, `*.key`, `*.pem`, `credencial*`, ni archivo con `TOKEN=`/`KEY=` hardcodeado entra al stage.
+3. `git diff --cached` leído completo: prohibido `sk-`/`ghp_`/`AKIA`/passwords/URLs con credenciales, aunque sea "solo un script local".
+4. API keys **solo** por variables de entorno del host (`$env:NOMBRE` / `export`), nunca literales en `.ps1`/`.bat`/`.md`/`.yaml`. Excepción: placeholders obvios (`tu-key`, `sk-tu-clave`).
+5. Si el hallazgo ya está en historial pusheado: no basta con borrar el archivo — se rota la credencial y se avisa al dueño. Lección 2026-10-20: `sk-orca-` se filtró a GitHub vía launcher y el patrón no existía en `check_secrets.py`.
+
 ## 🪟 Gotchas de Windows PowerShell 5.1
 
 - No existe `head`/`&&`: usa `Select-Object -First`, y `; if ($?) { }` para encadenar. Los arrays se envuelven con `@()` (`+=` sobre objetos revienta).

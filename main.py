@@ -237,7 +237,7 @@ def main():
         print("-" * 60)
         
         try:
-            crew = setup_crew(args.modo)
+            crew = setup_crew(args.modo, instruccion=instruccion)
             resultado = crew.kickoff(inputs={"instruccion": instruccion})
             reporte = extract_crew_result(resultado)
             print("\n" + "=" * 60)

@@ -24,6 +24,13 @@ from dotenv import load_dotenv
 
 from core.llm_router import get_llm, ESTRATEGIA
 from core.clasificador import clasificar_instruccion
+from core.registro_ramas import REGISTRO_RAMAS
+
+# Guía de delegación generada del registro (ramas válidas + campos que exige cada crew).
+RAMAS_TXT = "; ".join(
+    f"{rama} (campos: {spec.get('campos', [])})"
+    for rama, spec in REGISTRO_RAMAS.items()
+)
 
 load_dotenv()
 
@@ -133,12 +140,20 @@ def guardar_borrador_tool(
 
 @tool("delegar_rama_tool")
 def delegar_rama_tool(
-    rama: Annotated[str, "Nombre de la rama obrera (disponibles: contenido)"],
-    inputs_json: Annotated[str, "Inputs para la rama en formato JSON"],
+    rama: Annotated[str, "Nombre de la rama obrera (ver registro: investigacion, planeacion, contenido, redes, analitica, atencion_cliente, auditoria)"],
+    inputs_json: Annotated[str, "Inputs en JSON con TODOS los campos que exige la rama (ver la lista en esta descripción)"],
 ) -> str:
     """Delega el trabajo a una rama especializada y devuelve su entregable.
-    Ramas disponibles: contenido. Para 'contenido', inputs: {tema, marca, audiencia, plataformas, tono}."""
+    {ramas}"""
     return mcp_client.call_tool("delegar_rama", {"rama": rama, "inputs_json": inputs_json})
+
+
+# Python no interpola docstrings: inyectamos la guía del registro en la
+# descripción que el LLM ve (asi siempre coincide con el registro vivo).
+delegar_rama_tool.description = (
+    "Delega el trabajo a una rama especializada y devuelve su entregable.\n"
+    f"{RAMAS_TXT}"
+)
 
 
 @tool("ejecutar_campana_tool")
@@ -151,8 +166,14 @@ def ejecutar_campana_tool(
     return mcp_client.call_tool("ejecutar_campana", {"objetivo": objetivo, "inputs_json": inputs_json})
 
 
-def setup_crew(modo: str = "local") -> Crew:
-    """Crea el Crew del Tronco: un Orquestador que razona con OpenRouter."""
+def setup_crew(modo: str = "local", instruccion: str | None = None) -> Crew:
+    """Crea el Crew del Tronco: un Orquestador que razona con OpenRouter.
+
+    Si se pasa la instruccion COMPLETA (con historial), pre-calcula su
+    clasificación determinista en Python y la inyecta en la Task: el LLM no
+    debe re-clasificar un fragmento (p.ej. solo 'sí, ejecuta') porque eso
+    oculta el trabajo pedido en el historial.
+    """
 
     def cargar_prompt(nombre_archivo: str, default: str) -> str:
         ruta = os.path.join(ORQ_DIR, "system_prompts", nombre_archivo)
@@ -179,11 +200,30 @@ def setup_crew(modo: str = "local") -> Crew:
         allow_delegation=True,
     )
 
+    # Clasificación PRE-CALCULADA sobre la instrucción completa (con historial).
+    # El clasificador determinista matchea keywords en TODO el bloque; si la
+    # Directora confirma un plan ('sí, ejecuta'), el historial trae la orden
+    # original y así rama_sugerida sí es visible.
+    pre = ""
+    if instruccion:
+        clas_pre = clasificar_instruccion(instruccion)
+        pre_json = json.dumps(clas_pre, ensure_ascii=False)
+        pre = (
+            "\n--- CLASIFICACION PRECALCULADA (calculada por Python sobre la instrucción "
+            "COMPLETA, historial incluido) ---\n" + pre_json + "\n"
+            "Es la referencia autoritativa: usala tal cual en tu JSON final. NO llames a "
+            "clasificar_instruccion_tool con solo la última línea ('sí, ejecuta'): si la "
+            "llamas, pasa el texto COMPLETO con el historial.\n"
+        )
+
     tarea_orquestacion = Task(
         description=(
-            "Instrucción (con historial) de la Directora: '{instruccion}'\n\n"
+            "Instrucción (con historial) de la Directora: '{instruccion}'\n"
+            f"{pre}\n"
             "Pasos:\n"
-            "1. Llama a clasificar_instruccion_tool para conocer complejidad y gate.\n"
+            "1. Toma la CLASIFICACION PRECALCULADA de arriba (fue calculada en Python "
+            "sobre la instrucción COMPLETA incl. historial): no la recalcules. Solo si no "
+            "existiera, llama a clasificar_instruccion_tool pasando el texto COMPLETO.\n"
             "2. FASE PLAN: si la instrucción pide trabajo (campaña, contenido, redes, "
             "investigación), y NO hay confirmación previa en el historial, NO delegues ni "
             "ejecutes: tu entregable es el PLAN (objetivo, ramas en orden, insumos por rama, "

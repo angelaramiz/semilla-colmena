@@ -293,6 +293,14 @@ def _procesar(item: dict) -> str:
     es_comandante = rol in ("comandante", "ceo")
     if texto.startswith("/quiensoy"):
         r = "Tu chat %s tiene rol: %s" % (chat, rol)
+    elif texto.startswith("/cola"):
+        with COLA_LOCK:
+            items = _items_leer()
+        n_p = sum(1 for it in items if it.get("estado") == "pendiente")
+        n_e = sum(1 for it in items if it.get("estado") == "en_proceso")
+        n_err = sum(1 for it in items if it.get("estado") == "error")
+        r = "📋 Cola: %d pendiente(s), %d en proceso, %d en error. Lo contestado queda en el registro de hechos." % (
+            n_p, n_e, n_err)
     elif texto.startswith(("/aprobar", "/rechazar")) and not es_comandante:
         r = "🚫 Solo el Comandante resuelve gates. Tu rol: %s (consulta: /estado /gates)." % rol
     elif not texto.startswith("/") and not es_comandante:
@@ -310,7 +318,7 @@ def _procesar(item: dict) -> str:
         r = cmd_estado()
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
         r = ("Soy el control del Orquestador. Tu rol: %s.\n"
-             "Comandos: /estado /gates /quiensoy%s"
+             "Comandos: /estado /cola /gates /quiensoy%s"
              % (rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
                 else " (solo lectura)"))
     else:

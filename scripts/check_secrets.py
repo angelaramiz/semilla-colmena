@@ -27,6 +27,8 @@ if sys.platform == "win32":
 
 PATRONES = [
     (r"sk-or-v1-[a-zA-Z0-9]{20,}", "OpenRouter API key"),
+    (r"sk-orca-[a-zA-Z0-9]{20,}", "Orcarouter API key"),
+    (r"sk-ant-[a-zA-Z0-9-]{20,}", "Anthropic API key"),
     (r"\bAIza[a-zA-Z0-9_-]{30,}\b", "Google API key"),
     (r"\bsb_publishable_[a-zA-Z0-9]{10,}", "Supabase publishable key"),
     (r"\bsb_secret_[a-zA-Z0-9]{10,}", "Supabase SECRET key"),

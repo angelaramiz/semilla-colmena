@@ -42,6 +42,19 @@ N_WORKERS = 3
 
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 PERMITIDOS = {x.strip() for x in os.environ.get("TELEGRAM_ALLOWED_IDS", "").split(",") if x.strip()}
+# Roles por chat: "id:rol" coma-separado (conservante observa, comandante ejecuta).
+# Ids no listados en ROLES quedan como conservante (solo lectura).
+ROLES: dict = {}
+for _par in os.environ.get("TELEGRAM_ROLES", "").split(","):
+    if ":" in _par:
+        _id, _rol = _par.split(":", 1)
+        ROLES[_id.strip()] = _rol.strip()
+
+
+def rol_de(chat: str) -> str:
+    if ROLES:
+        return ROLES.get(chat, "conservante")
+    return "comandante"  # sin mapeo declarado: permitido orig = comando total
 PUENTE = os.environ.get("PUENTE_URL", "http://127.0.0.1:4210").rstrip("/")
 COMANDANTE = os.environ.get("COMANDANTE_URL", "http://127.0.0.1:8001").rstrip("/")
 CTOKEN = os.environ.get("COMANDANTE_WEB_TOKEN", "").strip()
@@ -270,9 +283,22 @@ def _hecho_registrar(item: dict, respuesta: str):
 
 
 def _procesar(item: dict) -> str:
-    """Ejecuta una orden de la cola y devuelve el texto contestado."""
+    """Ejecuta una orden de la cola y devuelve el texto contestado.
+
+    Gating por rol: conservante observa (estado/gates/ubicación); solo el
+    comandante despacha órdenes (texto libre) y resuelve gates.
+    """
     chat, texto = item["chat"], item["texto"]
-    if texto.startswith("/gates"):
+    rol = rol_de(chat)
+    es_comandante = rol in ("comandante", "ceo")
+    if texto.startswith("/quiensoy"):
+        r = "Tu chat %s tiene rol: %s" % (chat, rol)
+    elif texto.startswith(("/aprobar", "/rechazar")) and not es_comandante:
+        r = "🚫 Solo el Comandante resuelve gates. Tu rol: %s (consulta: /estado /gates)." % rol
+    elif not texto.startswith("/") and not es_comandante:
+        r = ("🚫 Rol %s es de observación: solo /estado, /gates y /quiensoy.\n"
+             "Las órdenes de ejecución las despacha el Comandante (según chat id)." % rol)
+    elif texto.startswith("/gates"):
         r = cmd_gates()
     elif texto.startswith("/aprobar"):
         p = texto.split()
@@ -283,8 +309,10 @@ def _procesar(item: dict) -> str:
     elif texto.startswith("/estado"):
         r = cmd_estado()
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
-        r = ("Soy el control del Orquestador. Mándame la orden en texto.\n"
-             "Comandos: /estado /gates /aprobar <id> /rechazar <id>")
+        r = ("Soy el control del Orquestador. Tu rol: %s.\n"
+             "Comandos: /estado /gates /quiensoy%s"
+             % (rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
+                else " (solo lectura)"))
     else:
         ctx = _historial(chat)
         respuesta = puente_orquestar(texto, contexto=ctx)

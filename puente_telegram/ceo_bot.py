@@ -90,6 +90,31 @@ def cmd_gates() -> str:
         return "No pude leer gates: %s" % str(e)[:150]
 
 
+def cmd_estado() -> str:
+    """Tablero instantaneo: GET /estado del puente (sin run CrewAI)."""
+    try:
+        with urllib.request.urlopen(PUENTE + "/estado", timeout=15) as r:
+            d = json.loads(r.read().decode("utf-8"))
+        lineas = ["🧵 ESTADO COLMENA (tablero instantaneo)",
+                  "✅ puente vivo (%ds desde arranque)" % d.get("uptime_s", 0)]
+        runs = d.get("runs") or {}
+        for rid, inf in runs.items():
+            lineas.append("⏳ run %s rama %s desde %s (%s)"
+                          % (str(rid)[:8], inf.get("rama"),
+                             inf.get("inicio"), inf.get("estado")))
+        ult = d.get("ultimos") or {}
+        for rama, ev in ult.items():
+            detalle = str(ev.get("resumen") or ev.get("error") or "")[:110]
+            lineas.append("- %s: %s -> %s | %s"
+                          % (rama, ev.get("evento", ""), ev.get("siguiente", ""), detalle))
+        if not runs:
+            lineas.append("(sin runs activos)")
+        lineas.append("Tip: manda una orden en texto para un run completo (1-3 min).")
+        return "\n".join(lineas)
+    except Exception as e:
+        return "No pude leer el tablero del puente: %s" % str(e)[:150]
+
+
 def cmd_resolver(gid: str, decision: str) -> str:
     try:
         body = json.dumps({"decision": decision}).encode()
@@ -131,11 +156,13 @@ def main():
                     p = texto.split()
                     enviar(chat, cmd_resolver(p[1], "rechazada") if len(p) > 1 else "Uso: /rechazar <id>")
                 elif texto.startswith("/estado"):
-                    enviar(chat, puente_orquestar("Reporta en 5 líneas: estado de ramas y gates pendientes."))
+                    enviar(chat, cmd_estado())
                 elif texto.startswith("/start") or texto.startswith("/ayuda"):
                     enviar(chat, "Soy el control del Orquestador. Mándame la orden en texto.\n"
                                  "Comandos: /estado /gates /aprobar <id> /rechazar <id>")
                 else:
+                    enviar(chat, "⏳ Orden recibida. La Colmena está ejecutando (1-3 min); "
+                                 "te paso el entregable al terminar — no le sockets más comandos hasta ese aviso.")
                     enviar(chat, puente_orquestar(texto))
         except Exception as e:
             print("[CEO-BOT] error: %s" % str(e)[:200], flush=True)

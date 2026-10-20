@@ -28,7 +28,8 @@ Antes de CADA `commit`/`push`, el agente ejecuta y reporta:
 2. `git status --short` + `git ls-files | grep .env` — ningún `.env`, `*.key`, `*.pem`, `credencial*`, ni archivo con `TOKEN=`/`KEY=` hardcodeado entra al stage.
 3. `git diff --cached` leído completo: prohibido `sk-`/`ghp_`/`AKIA`/passwords/URLs con credenciales, aunque sea "solo un script local".
 4. API keys **solo** por variables de entorno del host (`$env:NOMBRE` / `export`), nunca literales en `.ps1`/`.bat`/`.md`/`.yaml`. Excepción: placeholders obvios (`tu-key`, `sk-tu-clave`).
-5. Si el hallazgo ya está en historial pusheado: no basta con borrar el archivo — se rota la credencial y se avisa al dueño. Lección 2026-10-20: `sk-orca-` se filtró a GitHub vía launcher y el patrón no existía en `check_secrets.py`.
+5. Todo ejecutable/script que maneje secretos (`.ps1`, `.bat`, `.sh` con keys, tokens o credenciales) se crea en `local/` (gitignored), NUNCA en el árbol trackeado. `local/` es segunda barrera: el secreto igual va por env, no hardcodeado.
+6. Si el hallazgo ya está en historial pusheado: no basta con borrar el archivo — se rota la credencial y se avisa al dueño. Lección 2026-10-20: `sk-orca-` se filtró a GitHub vía launcher y el patrón no existía en `check_secrets.py`.
 
 ## 🪟 Gotchas de Windows PowerShell 5.1
 

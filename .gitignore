@@ -46,3 +46,7 @@ dosc/
 
 # Entorno de agentes colaborativos (solo local)
 .agents/
+
+# Scripts/ejecutables locales con secretos (keys, tokens, credenciales).
+# Todo .ps1/.bat/.sh que contenga un secreto VA AQUÍ, nunca en el árbol trackeado.
+local/

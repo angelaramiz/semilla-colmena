@@ -34,11 +34,15 @@ if (Get-NetTCPConnection -LocalPort 4210 -State Listen -ErrorAction SilentlyCont
 # 3) OpenBot: app :3010 + server :3001 via start.sh (Git Bash en fondo)
 # Vars de modelo FIJAS aquí: el server hereda el entorno y cualquier
 # OPENAI_BASE_URL heredado (p. ej. Ollama 11434 de otra sesión) lo desvía.
+# La KEY vive en variable de entorno ORCA_API_KEY del host (nunca en repo).
 if ((Get-NetTCPConnection -LocalPort 3010 -State Listen -ErrorAction SilentlyContinue) -and
     (Get-NetTCPConnection -LocalPort 3001 -State Listen -ErrorAction SilentlyContinue)) {
     "openbot ya activo (:3001/:3010)" | Add-Content $log
 } else {
-    $bashCmd = 'export PATH=/usr/bin:/mingw64/bin:/c/Users/angel/.bun/bin:/c/Program\ Files/Docker/Docker/resources/bin:$PATH; export OPENAI_BASE_URL=https://api.orcarouter.ai/v1 OPENAI_API_KEY=sk-orca-30MKwOMptU4f5haW7p1JS9ui4sdCwP5sYXFg2Ckt7CE; unset OPENAI_MODEL; cd /c/Users/angel/Desktop/Proyectos/bots/openbot && ./scripts/start.sh > .logs/start-auto.log 2>&1'
-    Start-Process -FilePath "C:\Program Files\Git\bin\bash.exe" -ArgumentList "-c", $bashCmd -WindowStyle Hidden
-    "openbot lanzado en fondo (start-auto.log)" | Add-Content $log
+    if (-not $env:ORCA_API_KEY) { "FALTA ORCA_API_KEY en entorno; openbot NO lanzado" | Add-Content $log }
+    else {
+        $bashCmd = 'export PATH=/usr/bin:/mingw64/bin:/c/Users/angel/.bun/bin:/c/Program\ Files/Docker/Docker/resources/bin:$PATH; export OPENAI_BASE_URL=https://api.orcarouter.ai/v1 OPENAI_API_KEY=' + $env:ORCA_API_KEY + '; unset OPENAI_MODEL; cd /c/Users/angel/Desktop/Proyectos/bots/openbot && ./scripts/start.sh > .logs/start-auto.log 2>&1'
+        Start-Process -FilePath "C:\Program Files\Git\bin\bash.exe" -ArgumentList "-c", $bashCmd -WindowStyle Hidden
+        "openbot lanzado en fondo (start-auto.log)" | Add-Content $log
+    }
 }

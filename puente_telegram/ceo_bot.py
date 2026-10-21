@@ -26,12 +26,24 @@
 # Uso:  python ceo_bot.py   (o Arrancar-Colmena lo levanta si hay token)
 import json
 import os
+import sys
 import threading
 import time
 import urllib.parse
 import urllib.request
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
+if AQUI not in sys.path:
+    sys.path.insert(0, AQUI)
+
+# F4b: el chat va DIRECTO a OpenBot por defecto (memoria/learning de su server).
+# PUENTE_ORQUESTADOR=crewai conserva el path viejo (puente AG-UI :4210) como
+# respaldo de emergencia o para forzarlo manualmente.
+PUENTE_MODO = os.getenv("PUENTE_ORQUESTADOR", "openbot").lower()
+if PUENTE_MODO not in ("openbot", "crewai"):
+    PUENTE_MODO = "openbot"
+if PUENTE_MODO == "openbot":
+    import openbot_api
 COLA = os.path.join(AQUI, "cola")
 PENDING = os.path.join(COLA, "pendientes.jsonl")
 HECHOS = os.path.join(COLA, "hechos.jsonl")
@@ -133,6 +145,15 @@ def puente_orquestar(texto: str, contexto: str = "") -> str:
     return texto_full[-3500:] or "(sin respuesta del orquestador)"
 
 
+def _respaldo_vivo() -> bool:
+    """¿Está vivo el puente CrewAI viejo (:4210)? Se usa solo como respaldo."""
+    try:
+        with urllib.request.urlopen(PUENTE + "/estado", timeout=5):
+            return True
+    except Exception:
+        return False
+
+
 def cmd_gates() -> str:
     try:
         req = urllib.request.Request(COMANDANTE + "/api/aprobaciones",
@@ -153,8 +174,13 @@ def cmd_estado() -> str:
     try:
         with urllib.request.urlopen(PUENTE + "/estado", timeout=15) as r:
             d = json.loads(r.read().decode("utf-8"))
-        lineas = ["🧵 ESTADO COLMENA (tablero instantáneo)",
-                  "✅ puente vivo (%ds desde arranque)" % d.get("uptime_s", 0)]
+        lineas = ["🧵 ESTADO COLMENA (tablero instantáneo)"]
+        if PUENTE_MODO == "openbot":
+            lineas.append("🧩 openbot: %s"
+                          % ("✅ arriba " + openbot_api.BASE
+                             if openbot_api.disponible()
+                             else "⚠️ CAÍDO " + openbot_api.BASE))
+        lineas.append("✅ puente vivo (%ds desde arranque)" % d.get("uptime_s", 0))
         runs = d.get("runs") or {}
         for rid, inf in runs.items():
             lineas.append("⏳ run %s rama %s desde %s (%s)"
@@ -326,7 +352,26 @@ def _procesar(item: dict) -> str:
                 else " (solo lectura)"))
     else:
         ctx = _historial(chat)
-        respuesta = puente_orquestar(texto, contexto=ctx)
+        if PUENTE_MODO == "openbot":
+            # F4b: texto crudo al thread de OpenBot — el historial/plan y la
+            # confirmación ya viven en la memoria del thread de OpenBot.
+            try:
+                respuesta = openbot_api.orquestar(chat, texto)
+            except Exception as e:
+                causa = str(e)[:200]
+                if _respaldo_vivo():
+                    respuesta = ("🔧 Respaldo CrewAI (OpenBot falló: %s)\n\n%s"
+                                 % (causa[:110],
+                                    _presentar(puente_orquestar(texto,
+                                                                contexto=ctx))))
+                else:
+                    respuesta = ("⚠️ OpenBot no respondió: %s\n"
+                                 "Tampoco hay respaldo CrewAI vivo. "
+                                 "Revisa el stack y usa /estado." % causa)
+        else:
+            respuesta = puente_orquestar(texto, contexto=ctx)
+        if not respuesta.strip():
+            respuesta = "(respuesta vacía del orquestador)"
         respuesta = _presentar(respuesta)
         _historial(chat, texto)
         with HIST_LOCK:

@@ -20,6 +20,7 @@ import sys
 import json
 import shutil
 import urllib.parse
+import urllib.request
 from html.parser import HTMLParser
 
 ORQ_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +34,7 @@ from dotenv import load_dotenv
 from core.ejecutar import run_seguro, verificar as _verificar_binario
 
 load_dotenv()
+SERPER_API_KEY = os.getenv("SERPER_API_KEY", "").strip()
 
 mcp = FastMCP("RamaInvestigacion")
 
@@ -202,7 +204,34 @@ class _ResultadosBing(HTMLParser):
             self._cur = None
 
 
+def _buscar_serper_web(q: str, tope: int = 10) -> list:
+    """Busqueda real via Serper.dev (Google). Primera fuente si hay key."""
+    if not SERPER_API_KEY:
+        return []
+    try:
+        body = json.dumps({"q": q, "gl": "mx", "hl": "es", "num": tope}).encode("utf-8")
+        req = urllib.request.Request(
+            "https://google.serper.dev/search", data=body,
+            headers={"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"},
+            method="POST")
+        with urllib.request.urlopen(req, timeout=25) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        out = []
+        for it in d.get("organic", [])[:tope]:
+            out.append({"url": it.get("link", ""), "titulo": it.get("title", ""),
+                        "extracto": it.get("snippet", "")})
+        return out
+    except Exception as e:
+        _log("buscar_serper_web fallo: %s" % e)
+        return []
+
+
 def _buscar_lista(q: str, tope: int = 10) -> list:
+    # 1) Serper (Google real) — estable y con geo mx
+    res = _buscar_serper_web(q, tope)
+    if res:
+        return res[:tope]
+    # resto de la cadena: scrape directo (Bing -> DDG)
     for url, parser_cls in (
         ("https://www.bing.com/search?q=" + urllib.parse.quote_plus(q), _ResultadosBing),
         ("https://html.duckduckgo.com/html/?q=" + urllib.parse.quote_plus(q), _ResultadosDDG),
@@ -231,7 +260,7 @@ def buscar_web(consulta: str, ciudad: str = "") -> str:
     res = _buscar_lista(q)
     if res:
         return json.dumps({"consulta": q, "resultados": res,
-                           "fuente": "web directa (navegador del sistema)"},
+                           "fuente": "web real (serper/google + scrape fallback)"},
                           ensure_ascii=False)
     return json.dumps({"consulta": q, "resultados": [],
                        "fuente": "web directa: sin resultados (posible bloqueo anti-bot)"},
@@ -266,7 +295,7 @@ def buscar_mercado(tema: str, ciudad: str = "") -> str:
         "audiencia_objetivo": "ver extractos de resultados",
         "canales_clave": ["Google", "Instagram", "TikTok", "Email"],
         "hallazgos_web": res,
-        "fuente": "web directa (navegador del sistema)",
+        "fuente": "web real (serper/google + scrape fallback)",
     }, ensure_ascii=False)
 
 
@@ -295,7 +324,7 @@ def analizar_competencia(categoria: str, ciudad: str = "") -> str:
     return json.dumps({
         "categoria": categoria, "ciudad": ciudad or "general",
         "competidores": compas,
-        "fuente": "web directa (navegador del sistema)",
+        "fuente": "web real (serper/google + scrape fallback)",
     }, ensure_ascii=False)
 
 
@@ -309,7 +338,7 @@ def detectar_tendencias(categoria: str = "") -> str:
     return json.dumps({
         "categoria": categoria or "general",
         "tendencias": tends,
-        "fuente": "web directa (navegador del sistema)",
+        "fuente": "web real (serper/google + scrape fallback)",
     }, ensure_ascii=False)
 
 

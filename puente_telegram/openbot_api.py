@@ -9,10 +9,14 @@ Protocolo verificado en vivo contra el server (:3001):
 2. GET  /api/copilotkit/threads/<threadId>/events -> snapshot JSON de eventos
    (RUN_STARTED / TEXT_MESSAGE_CONTENT / RUN_FINISHED / RUN_ERROR).
 
-La memoria/aprendizaje de OpenBot vive en el thread (Intelligence): cada chat
-de Telegram mapea a SU PROPIO channel/thread, asi la conversacion del CEO
-(plan -> confirmacion -> ejecucion) acumula memoria real sin duplicarla en
-el lado de la agencia.
+Memoria del thread: con la Intelligence cloud "not entitled" (deploy single
+user local) el server NO restaura el historial por su cuenta; el cliente debe
+reenviarlo en cada RunAgentInput (regla AG-UI). El thread-store SÍ conserva
+todos los mensajes (GET threads/<tid>/messages), asi que este puente:
+  - lee el historial del thread antes de cada run,
+  - lo reenvia COMPLETO junto con la orden nueva.
+Asi el plan -> confirmacion viaja como en la web, sin duplicar nada en el
+lado de la agencia.
 """
 import json
 import os
@@ -71,6 +75,33 @@ def disponible() -> bool:
         return False
 
 
+def _historial_thread(thread_id: str, max_mensajes: int = 40) -> list:
+    """Historial del thread (user/assistant con texto) para reenviar en el run.
+
+    Sin Intelligence entitle el server no restaura el historial: AG-UI
+    espera que el cliente lo incluya completo en cada RunAgentInput.
+    Se capan los mensajes (`max_mensajes` recientes) para no inflar el run.
+    """
+    try:
+        hist = _get("/api/copilotkit/threads/%s/messages" % thread_id,
+                    timeout=20)
+    except Exception:
+        return []
+    msgs = hist.get("messages") if isinstance(hist, dict) else hist
+    if not isinstance(msgs, list):
+        return []
+    limpio = [
+        {"id": m.get("id") or "meta-%d" % i,
+         "role": m.get("role") or "user",
+         "content": m.get("content") or ""}
+        for i, m in enumerate(msgs)
+        if isinstance(m, dict)
+        and m.get("role") in ("user", "assistant")
+        and (m.get("content") or "").strip()
+    ]
+    return limpio[-max_mensajes:]
+
+
 def _ventana(ch: dict, texto: str) -> str:
     """Un ciclo de run completo con un channel/thread resuelto."""
     json_body = {
@@ -83,6 +114,9 @@ def _ventana(ch: dict, texto: str) -> str:
         "context": [],
         "forwardedProps": {},
     }
+    json_body["messages"] = (
+        _historial_thread(ch["threadId"])
+        + json_body["messages"])
     r = None
     for intento in range(1, INTENTOS_RED + 1):
         try:

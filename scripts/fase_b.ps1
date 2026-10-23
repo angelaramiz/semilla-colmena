@@ -33,6 +33,9 @@ function Paso1 {
 }
 function Paso2 {
   docker version | Out-Null
+  # restaurar datos de la base (chats/connexor) antes de arrancar server
+  # (schema ya lo crea migrate-1; el dump es data-only)
+  Get-Content "$OB\.fase_b\openbot_dump_data.sql" -Raw | docker exec -i openbot-postgres-1 psql -U openbot -d openbot | Select-Object -Last 2
   Push-Location $OB
   docker compose up -d
   Pop-Location

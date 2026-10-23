@@ -52,9 +52,9 @@ def _reg_lee(nombre: str) -> str:
 def _hijos():
     """Lista de (nombre, args, cwd, env-extra).
 
-    SERVIDOR_MCP_ONLY=1 levanta solo el MCP (fase de despliegue,
-    antes del corte de la escucha de Telegram)."""
-    solo_mcp = os.environ.get("SERVIDOR_MCP_ONLY", "").strip() == "1"
+    SERVIDOR_BOTS_ALL=1 habilita ademas la escucha de Telegram (corte a este host);
+    por defecto solo MCP, para no duplicar polling con otro host."""
+    solo_mcp = os.environ.get("SERVIDOR_BOTS_ALL", "").strip() != "1"
     env_base = {}
     for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_IDS", "TELEGRAM_ROLES"):
         v = _reg_lee(k)
@@ -63,7 +63,8 @@ def _hijos():
     if not env_base.get("TELEGRAM_BOT_TOKEN"):
         log.warning("TELEGRAM_BOT_TOKEN ausente en registry; solo levantara el MCP")
         solo_mcp = True
-        log.warning("corriendo en modo SERVIDOR_MCP_ONLY")
+        log.warning("TELEGRAM_BOT_TOKEN ausente en registry; solo levantara el MCP")
+        log.warning("corriendo en modo SERVIDOR_BOTS_ALL desactivado (solo MCP)")
 
     mcp_cmd = [os.path.join(REPO, ".venv", "Scripts", "python.exe"),
                os.path.join(REPO, "investigacion", "servidor_mcp.py"),
@@ -88,7 +89,7 @@ def main():
     log.info("Servidor de bots arrancando (repo: %s)", REPO)
     estados = {}  # nombre -> {"proc": Popen|None, "fallos": int, "espera": s}
 
-    solo_mcp_mode = os.environ.get("SERVIDOR_MCP_ONLY", "").strip() == "1"
+    solo_mcp_mode = os.environ.get("SERVIDOR_BOTS_ALL", "").strip() != "1"
     hijos = _hijos()
     if solo_mcp_mode:
         hijos = [h for h in hijos if h[0] == "mcp-8221"]
@@ -111,9 +112,13 @@ def main():
                     env.update(st["env_extra"])
                     if sys.platform == "win32":
                         env["PYTHONIOENCODING"] = "utf-8"
+                    log_hijo = open(os.path.join(LOG_DIR, nombre + ".log"),
+                                    "ab", buffering=0)
                     st["proc"] = subprocess.Popen(
                         st["cmd"], cwd=st["cwd"], env=env,
-                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                        stdout=log_hijo, stderr=subprocess.STDOUT)
+                    log_hijo.write(("\n==== arranque pid %d %s ====\n"
+                                    % (st["proc"].pid, time.strftime("%Y-%m-%d %H:%M:%S"))).encode())
                     log.info("(%s) pid %s", nombre, st["proc"].pid)
                 except Exception as e:
                     log.error("(%s) no se pudo arrancar: %s", nombre, e)

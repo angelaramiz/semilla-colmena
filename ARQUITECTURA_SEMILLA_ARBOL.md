@@ -433,12 +433,20 @@ uv run python main.py --registrar-arbol --arb-id cliente_01 --arb-host cliente-0
 La agencia opera como una **colmena** donde cada nodo tiene un rol según el ciclo de
 actividad, no solo una topología fija.
 
+**Concepto rector (2026-10-24, Dev Principal):** la colmena distingue **árboles
+principales** y **árboles obreros**. En cada árbol obrero viven las estructuras y
+organigramas de bots dirigidos por su orquestador; tener más obreros equivale a tener
+más **despachos**, uno para resolver cada caso. Los árboles principales son para
+**dirigir**: asignar las metas y el tipo de trabajo, y encargarse del **mantenimiento,
+desarrollo y mejora** del sistema colectivo.
+
 ### Roles por perfil de actividad
 
 | Rol | Nodo | Uptime | Carga | Responsabilidad |
 |-----|------|--------|-------|-----------------|
-| **Obrero** | Árboles hijo | 🟢 24/7 (aprox.) | Constante | Tronco + todas las ramas corriendo siempre: producen, atienden, publican tras gate. Son los servidores vivos. |
-| **Comandante** | Árbol principal | 🔵 Bajo demanda (cold start) | Variable / picos | Coordina, diagnostica y controla a los obreros (vía `comunicacion/`). No mantiene ramas corriendo por defecto. |
+| **Obrero** | Árboles hijo | 🟢 24/7 (aprox.) | Constante | Tronco + todas las ramas corriendo siempre: producen, atienden, publican tras gate. Son los servidores vivos y los **despachos que resuelven casos**. |
+| **Comandante** | Árbol principal | 🔵 Bajo demanda (cold start) | Variable / picos | Dirige: asigna metas y tipo de trabajo a cada despacho obrero, coordina, diagnostica y controla (vía `comunicacion/`). No mantiene ramas corriendo por defecto. |
+| **Conservante** | Árbol principal | 🔵 Bajo demanda | Variable | El otro principal: mantenimiento, desarrollo y mejora del sistema — sana, poda y actualiza árboles. Micelio nunca modifica un árbol sin él; sus gates críticos (`db.Aprobacion`, `/aprobaciones`) solo los aprueba la Directora Humana. |
 
 ### Reglas de la mente colmena
 

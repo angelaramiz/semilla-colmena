@@ -80,9 +80,16 @@ def _hijos():
     if not os.path.exists(bot_cmd[0]):
         bot_cmd = ["uv", "run", "python", os.path.join(REPO, "puente_telegram", "ceo_bot.py")]
 
+    # Mesa del puente (tablero /estado + /ag-ui): la lee el ceo_bot y el monitoreo.
+    puente_cmd = [os.path.join(REPO, ".venv", "Scripts", "python.exe"),
+                  os.path.join(REPO, "puente_agui", "servidor.py")]
+    if not os.path.exists(puente_cmd[0]):
+        puente_cmd = ["uv", "run", "python", os.path.join(REPO, "puente_agui", "servidor.py")]
+
     return [
         ("mcp-8221", mcp_cmd, REPO, {}),
         ("ceo-bot", bot_cmd, REPO, env_base),
+        ("puente-agui", puente_cmd, REPO, {}),
     ]
 
 

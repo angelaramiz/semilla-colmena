@@ -57,7 +57,7 @@ def _hijos():
     solo_mcp = os.environ.get("SERVIDOR_BOTS_ALL", "").strip() != "1"
     env_base = {}
     for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_IDS", "TELEGRAM_ROLES",
-              "TELEGRAM_NUEVO_ID_ROL"):
+              "TELEGRAM_NOMBRES", "TELEGRAM_NUEVO_ID_ROL"):
         v = _reg_lee(k)
         if v:
             env_base[k] = v

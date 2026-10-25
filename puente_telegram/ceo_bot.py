@@ -66,6 +66,24 @@ for _par in os.environ.get("TELEGRAM_ROLES", "").split(","):
         ROLES[_id.strip()] = _rol.strip()
 NUEVO_ID_ROL = os.environ.get("TELEGRAM_NUEVO_ID_ROL", "").strip().lower()
 NUEVO_ID_ARCH = os.path.join(COLA, "nuevo_id_asignado.json")
+# Identidades por chat: "id:nombre" coma-separado (p.ej. "7360569493:Arangel").
+# Si un id no esta aqui, se usa el first_name/username que Telegram trae en
+# cada update. Sirve para que el bot (y el cerebro OpenBot) sepa quien es quien.
+NOMBRES: dict = {}
+for _par in os.environ.get("TELEGRAM_NOMBRES", "").split(","):
+    if ":" in _par:
+        _id, _nom = _par.split(":", 1)
+        if _id.strip():
+            NOMBRES[_id.strip()] = _nom.strip()
+
+
+def nombre_de(chat: str, remitente_tg: str = "") -> str:
+    """Nombre visible del remitente: mapa admin > Telegram > chat id."""
+    if chat in NOMBRES:
+        return NOMBRES[chat]
+    if remitente_tg:
+        return remitente_tg
+    return "chat %s" % chat
 
 
 ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
@@ -350,9 +368,10 @@ def _procesar(item: dict) -> str:
     """
     chat, texto = item["chat"], item["texto"]
     rol = rol_de(chat)
+    nombre = nombre_de(chat, item.get("remitente", ""))
     es_comandante = rol in ACCESO_TOTAL
     if texto.startswith("/quiensoy"):
-        r = "Tu chat %s tiene rol: %s" % (chat, rol)
+        r = "Eres %s · rol: %s (chat %s)" % (nombre, rol, chat)
     elif texto.startswith("/cola"):
         with COLA_LOCK:
             items = _items_leer()
@@ -377,30 +396,33 @@ def _procesar(item: dict) -> str:
     elif texto.startswith("/estado"):
         r = cmd_estado()
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
-        r = ("Soy el control del Orquestador. Tu rol: %s.\n"
+        r = ("Soy el control del Orquestador. Eres %s · rol: %s.\n"
              "Comandos: /estado /cola /gates /quiensoy%s"
-             % (rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
+             % (nombre, rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
                 else " (solo lectura)"))
     else:
         ctx = _historial(chat)
+        # Identidad inyectada: el cerebro sabe QUIEN habla y con QUE rol,
+        # asi "sabes quien soy?" se responde con datos, no con memoria generica.
+        firmado = "[Soy %s, rol %s] %s" % (nombre, rol, texto)
         if PUENTE_MODO == "openbot":
             # F4b: texto crudo al thread de OpenBot — el historial/plan y la
             # confirmación ya viven en la memoria del thread de OpenBot.
             try:
-                respuesta = openbot_api.orquestar(chat, texto)
+                respuesta = openbot_api.orquestar(chat, firmado)
             except Exception as e:
                 causa = str(e)[:200]
                 if _respaldo_vivo():
                     respuesta = ("🔧 Respaldo CrewAI (OpenBot falló: %s)\n\n%s"
                                  % (causa[:110],
-                                    _presentar(puente_orquestar(texto,
+                                    _presentar(puente_orquestar(firmado,
                                                                 contexto=ctx))))
                 else:
                     respuesta = ("⚠️ OpenBot no respondió: %s\n"
                                  "Tampoco hay respaldo CrewAI vivo. "
                                  "Revisa el stack y usa /estado." % causa)
         else:
-            respuesta = puente_orquestar(texto, contexto=ctx)
+            respuesta = puente_orquestar(firmado, contexto=ctx)
         if not respuesta.strip():
             respuesta = "(respuesta vacía del orquestador)"
         respuesta = _presentar(respuesta)
@@ -477,6 +499,8 @@ def main():
                 texto = (msg.get("text") or "").strip()
                 if not texto:
                     continue
+                de = msg.get("from") or {}
+                remitente_tg = str(de.get("first_name") or de.get("username") or "").strip()
                 if chat not in PERMITIDOS:
                     enviar(chat, "No autorizado. Tu id de Telegram es %s — "
                                  "un id autorizado debe darte de alta antes de usar el bot."
@@ -490,12 +514,13 @@ def main():
                     if any(it["update_id"] == uid for it in items):
                         continue
                     items.append({"update_id": uid, "chat": chat,
+                                  "remitente": remitente_tg,
                                   "texto": texto[:4000], "estado": "pendiente",
                                   "ts": time.time()})
                     _items_escribir(items)
                 if not texto.startswith("/"):
-                    enviar(chat, "📥 En cola. Hay %d orden(es) esperando — te contesto "
-                                 "en cuanto le toque." % len(items))
+                    enviar(chat, "📥 En cola, %s. Hay %d orden(es) esperando — te contesto "
+                                 "en cuanto le toque." % (nombre_de(chat, remitente_tg), len(items)))
         except Exception as e:
             print("[CEO-BOT] error: %s" % str(e)[:200], flush=True)
             time.sleep(5)

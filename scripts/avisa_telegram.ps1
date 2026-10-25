@@ -17,12 +17,12 @@ function Reg-Lee([string]$Nombre) {
 }
 
 $token = Reg-Lee 'TELEGRAM_BOT_TOKEN'
-$ids = ((Reg-Lee 'TELEGRAM_ALLOWED_IDS') -split '[,;\s]') | Where-Object { $_ }
+$ids = @(((Reg-Lee 'TELEGRAM_ALLOWED_IDS') -split '[,;\s]') | Where-Object { $_ })
 if (-not $token -or -not $ids) {
     Write-Output 'FALLO: TELEGRAM_BOT_TOKEN o TELEGRAM_ALLOWED_IDS ausentes en el registro del host'
     exit 1
 }
-$chat = $ids[0].Trim()
+$chat = [string]$ids[0]
 $api = 'https://api.telegram.org/bot{0}/sendMessage' -f $token
 
 $partes = @()

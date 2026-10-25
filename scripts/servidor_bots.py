@@ -56,7 +56,8 @@ def _hijos():
     por defecto solo MCP, para no duplicar polling con otro host."""
     solo_mcp = os.environ.get("SERVIDOR_BOTS_ALL", "").strip() != "1"
     env_base = {}
-    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_IDS", "TELEGRAM_ROLES"):
+    for k in ("TELEGRAM_BOT_TOKEN", "TELEGRAM_ALLOWED_IDS", "TELEGRAM_ROLES",
+              "TELEGRAM_NUEVO_ID_ROL"):
         v = _reg_lee(k)
         if v:
             env_base[k] = v

@@ -55,21 +55,52 @@ N_WORKERS = 3
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 PERMITIDOS = {x.strip() for x in os.environ.get("TELEGRAM_ALLOWED_IDS", "").split(",") if x.strip()}
 # Roles por chat: "id:rol" coma-separado (conservante observa, comandante ejecuta).
-# Ids no listados en ROLES quedan como conservante (solo lectura).
+# Ids no listados en ROLES quedan como conservante (solo lectura) — EXCEPTO el
+# primer id nuevo: si TELEGRAM_NUEVO_ID_ROL declara un rol de acceso total
+# (comandante/ceo/dev), ese id lo recibe UNA sola vez (cosume marcador en
+# cola/nuevo_id_asignado.json) — orden Dev 2026-10-24: proximo id registrado = RUTI.
 ROLES: dict = {}
 for _par in os.environ.get("TELEGRAM_ROLES", "").split(","):
     if ":" in _par:
         _id, _rol = _par.split(":", 1)
         ROLES[_id.strip()] = _rol.strip()
+NUEVO_ID_ROL = os.environ.get("TELEGRAM_NUEVO_ID_ROL", "").strip().lower()
+NUEVO_ID_ARCH = os.path.join(COLA, "nuevo_id_asignado.json")
+
+
+ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
+
+
+def _nuevo_id_leer() -> dict:
+    try:
+        with open(NUEVO_ID_ARCH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def rol_de(chat: str) -> str:
     if ROLES:
-        return ROLES.get(chat, "conservante")
+        if chat in ROLES:
+            return ROLES[chat]
+        # id autorizado pero sin rol declarado
+        if NUEVO_ID_ROL in ACCESO_TOTAL:  # dev = conservante con planta completa
+            previo = _nuevo_id_leer()
+            if not previo.get("id"):
+                dato = {"id": chat, "rol": NUEVO_ID_ROL, "ts": time.time()}
+                try:
+                    os.makedirs(COLA, exist_ok=True)
+                    with open(NUEVO_ID_ARCH, "w", encoding="utf-8") as f:
+                        json.dump(dato, f, ensure_ascii=False)
+                    print("[CEO-BOT] id %s -> rol %s (primer id nuevo, consumo unico)"
+                          % (chat, NUEVO_ID_ROL), flush=True)
+                except Exception:
+                    return "conservante"
+                return NUEVO_ID_ROL
+        return "conservante"
     return "comandante"  # sin mapeo declarado: permitido orig = comando total
 
 
-ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
 PUENTE = os.environ.get("PUENTE_URL", "http://127.0.0.1:4210").rstrip("/")
 COMANDANTE = os.environ.get("COMANDANTE_URL", "http://127.0.0.1:8001").rstrip("/")
 CTOKEN = os.environ.get("COMANDANTE_WEB_TOKEN", "").strip()
@@ -447,7 +478,9 @@ def main():
                 if not texto:
                     continue
                 if chat not in PERMITIDOS:
-                    enviar(chat, "No autorizado. Este bot solo responde al CEO.")
+                    enviar(chat, "No autorizado. Tu id de Telegram es %s — "
+                                 "un id autorizado debe darte de alta antes de usar el bot."
+                           % chat)
                     continue
                 uid = up["update_id"]
                 if uid in hechos:

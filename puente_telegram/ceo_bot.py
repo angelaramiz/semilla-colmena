@@ -86,6 +86,95 @@ def nombre_de(chat: str, remitente_tg: str = "") -> str:
     return "chat %s" % chat
 
 
+ACCESO_ARCH = os.path.join(COLA, "acceso.json")  # DB local: usuarios + solicitudes
+ROLES_AUTORIZABLES = ("conservante", "comandante")  # dev/ceo solo por registry manual
+
+
+def _acceso_cargar() -> dict:
+    try:
+        with open(ACCESO_ARCH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            if isinstance(d, dict):
+                d.setdefault("usuarios", {})
+                d.setdefault("solicitudes", {})
+                return d
+    except Exception:
+        pass
+    return {"usuarios": {}, "solicitudes": {}}
+
+
+def _acceso_guardar(d: dict) -> None:
+    try:
+        os.makedirs(COLA, exist_ok=True)
+        with open(ACCESO_ARCH, "w", encoding="utf-8") as f:
+            json.dump(d, f, ensure_ascii=False)
+    except Exception as e:
+        print("[CEO-BOT] no pude guardar acceso.json: %s" % str(e)[:120], flush=True)
+
+
+def _acceso_merge() -> None:
+    """Al arrancar: los usuarios autorizados en la DB local entran como permitidos."""
+    d = _acceso_cargar()
+    for cid, u in d.get("usuarios", {}).items():
+        cid = str(cid)
+        PERMITIDOS.add(cid)
+        if u.get("rol"):
+            ROLES[cid] = u["rol"]
+        if u.get("nombre"):
+            NOMBRES[cid] = u["nombre"]
+
+
+def _admins() -> list:
+    """Chats admin (dev/ceo) que reciben las solicitudes. Sin efectos laterales."""
+    ads = [c for c, r in ROLES.items()
+           if r.strip().lower() in ("dev", "ceo") and c in PERMITIDOS]
+    if ads:
+        return ads
+    return sorted(PERMITIDOS)[:1]
+
+
+def _atender_solicitud(chat: str, texto: str, de: dict) -> None:
+    """Onboarding de ids no autorizados: pide apodo, registra solicitud, avisa al admin."""
+    d = _acceso_cargar()
+    sol = d["solicitudes"].get(chat)
+    if sol and sol.get("estado") == "pendiente":
+        enviar(chat, "⏳ Tu solicitud como '%s' sigue pendiente de aprobación. "
+                     "Te aviso en cuanto te den acceso." % sol.get("nombre", "?"))
+        return
+    if sol and sol.get("estado") == "esperando_nombre":
+        apodo = texto.strip()[:30]
+        if not apodo or apodo.startswith("/"):
+            enviar(chat, "Dime el nombre o apodo que quieres usar "
+                         "(texto simple, sin /comandos).")
+            return
+        sol["nombre"] = apodo
+        sol["estado"] = "pendiente"
+        sol["ts"] = time.time()
+        _acceso_guardar(d)
+        quien = "%s%s" % (sol.get("first_name") or "?", 
+                          (" (@" + sol["username"] + ")") if sol.get("username") else "")
+        for adm in _admins():
+            enviar(adm, "🆕 Solicitud de acceso\n¿Quién: %s — id %s\nApodo: %s\n\n"
+                        "Autoriza con:\n/autorizar %s comandante\n"
+                        "/autorizar %s conservante\n/rechazar %s"
+                   % (quien, chat, apodo, chat, chat, chat))
+        print("[CEO-BOT] solicitud %s (%s) pendiente" % (chat, apodo), flush=True)
+        enviar(chat, "✅ Listo, %s. Tu solicitud quedó registrada — "
+                     "te aviso cuando te autoricen." % apodo)
+        return
+    d["solicitudes"][chat] = {
+        "estado": "esperando_nombre",
+        "first_name": str((de or {}).get("first_name") or ""),
+        "username": str((de or {}).get("username") or ""),
+        "ts": time.time(),
+    }
+    _acceso_guardar(d)
+    hola = " %s" % d["solicitudes"][chat]["first_name"] if d["solicitudes"][chat]["first_name"] else ""
+    enviar(chat, "👋 Hola%s. Este bot es privado.\n"
+                 "¿Con qué nombre o apodo quieres registrarte? Escríbelo ahora "
+                 "y tu solicitud llegará al administrador." % hola)
+
+
 ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
 
 
@@ -370,8 +459,67 @@ def _procesar(item: dict) -> str:
     rol = rol_de(chat)
     nombre = nombre_de(chat, item.get("remitente", ""))
     es_comandante = rol in ACCESO_TOTAL
+    es_admin = rol in ("dev", "ceo")
     if texto.startswith("/quiensoy"):
         r = "Eres %s · rol: %s (chat %s)" % (nombre, rol, chat)
+    elif texto.startswith("/solicitudes"):
+        if not es_admin:
+            r = "🚫 Solo el administrador ve las solicitudes. Tu rol: %s." % rol
+        else:
+            d = _acceso_cargar()
+            pend = [(c, s) for c, s in d.get("solicitudes", {}).items()
+                    if s.get("estado") == "pendiente"]
+            if not pend:
+                r = "📭 Sin solicitudes pendientes."
+            else:
+                r = "📬 Solicitudes pendientes:\n" + "\n".join(
+                    "- %s · id %s (%s)" % (s.get("nombre", "?"), c,
+                                           s.get("first_name") or s.get("username") or "?")
+                    for c, s in pend)
+    elif texto.startswith("/autorizar"):
+        if not es_admin:
+            r = "🚫 Solo el administrador autoriza accesos. Tu rol: %s." % rol
+        else:
+            p = texto.split()
+            if len(p) < 2 or not p[1].isdigit():
+                r = "Uso: /autorizar <id> [conservante|comandante]"
+            else:
+                cid, rol_new = p[1], (p[2].lower() if len(p) > 2 else "conservante")
+                if rol_new not in ROLES_AUTORIZABLES:
+                    r = "Rol inválido: solo %s (dev/ceo se dan por registry)." % "/".join(ROLES_AUTORIZABLES)
+                else:
+                    d = _acceso_cargar()
+                    sol = d.get("solicitudes", {}).get(cid, {})
+                    apodo = sol.get("nombre") or nombre_de(cid)
+                    d["usuarios"][cid] = {"nombre": apodo, "rol": rol_new,
+                                          "autorizado_por": nombre, "ts": time.time()}
+                    d["solicitudes"].pop(cid, None)
+                    _acceso_guardar(d)
+                    PERMITIDOS.add(cid)
+                    ROLES[cid] = rol_new
+                    NOMBRES[cid] = apodo
+                    enviar(cid, "✅ Acceso autorizado: eres %s · rol %s. "
+                                "Manda /quiensoy para verificar." % (apodo, rol_new))
+                    print("[CEO-BOT] autorizado %s (%s) rol %s por %s"
+                          % (cid, apodo, rol_new, chat), flush=True)
+                    r = "✅ %s (id %s) registrado como %s." % (apodo, cid, rol_new)
+    elif texto.startswith("/rechazar"):
+        if not es_admin:
+            r = "🚫 Solo el administrador rechaza accesos. Tu rol: %s." % rol
+        else:
+            p = texto.split()
+            if len(p) < 2 or not p[1].isdigit():
+                r = "Uso: /rechazar <id> [motivo]"
+            else:
+                cid = p[1]
+                motivo = " ".join(p[2:])[:120]
+                d = _acceso_cargar()
+                sol = d.get("solicitudes", {}).pop(cid, {})
+                _acceso_guardar(d)
+                enviar(cid, "🚫 Tu solicitud de acceso fue rechazada.%s"
+                            % (" Motivo: " + motivo if motivo else ""))
+                print("[CEO-BOT] rechazado %s por %s" % (cid, chat), flush=True)
+                r = "🚫 Solicitud de %s rechazada." % (sol.get("nombre") or cid)
     elif texto.startswith("/cola"):
         with COLA_LOCK:
             items = _items_leer()
@@ -397,9 +545,10 @@ def _procesar(item: dict) -> str:
         r = cmd_estado()
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
         r = ("Soy el control del Orquestador. Eres %s · rol: %s.\n"
-             "Comandos: /estado /cola /gates /quiensoy%s"
+             "Comandos: /estado /cola /gates /quiensoy%s%s"
              % (nombre, rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
-                else " (solo lectura)"))
+                else " (solo lectura)",
+                " | admin: /solicitudes /autorizar <id> [rol] /rechazar <id>" if es_admin else ""))
     else:
         ctx = _historial(chat)
         # Identidad inyectada: el cerebro sabe QUIEN habla y con QUE rol,
@@ -481,6 +630,7 @@ def main():
     if not TOKEN or not PERMITIDOS:
         raise SystemExit("Falta TELEGRAM_BOT_TOKEN o TELEGRAM_ALLOWED_IDS")
     os.makedirs(COLA, exist_ok=True)
+    _acceso_merge()  # usuarios autorizados en la DB local entran como permitidos
     hechos = _hechos_ids()
     offset = _offset_cargar()
     for _ in range(N_WORKERS):
@@ -502,9 +652,7 @@ def main():
                 de = msg.get("from") or {}
                 remitente_tg = str(de.get("first_name") or de.get("username") or "").strip()
                 if chat not in PERMITIDOS:
-                    enviar(chat, "No autorizado. Tu id de Telegram es %s — "
-                                 "un id autorizado debe darte de alta antes de usar el bot."
-                           % chat)
+                    _atender_solicitud(chat, texto, de)
                     continue
                 uid = up["update_id"]
                 if uid in hechos:

@@ -175,6 +175,69 @@ def _atender_solicitud(chat: str, texto: str, de: dict) -> None:
                  "y tu solicitud llegará al administrador." % hola)
 
 
+APREN_ARCH = os.path.join(COLA, "aprendizajes.json")  # DB local de memoria enseñada
+APREN_STOP = frozenset(
+    "que como para por con una eso este esta los las del son fue han hay muy mas sin sobre "
+    "entre hasta desde donde cuando cual cuales porque pues solo tan tambien pero sus mis tu tus "
+    "the and for are with que".split())
+
+
+def _apren_cargar() -> list:
+    try:
+        with open(APREN_ARCH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def _apren_guardar(items: list) -> None:
+    try:
+        os.makedirs(COLA, exist_ok=True)
+        with open(APREN_ARCH, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False)
+    except Exception as e:
+        print("[CEO-BOT] no pude guardar aprendizajes.json: %s" % str(e)[:120], flush=True)
+
+
+def _apren_tokens(s: str) -> set:
+    return {w for w in __import__("re").findall(r"[a-záéíóúñü]{4,}", s.lower())
+            if w not in APREN_STOP}
+
+
+def _apren_relevantes(texto: str, top: int = 3) -> list:
+    """Aprendizajes cuyo tema/dato comparte palabras clave con el texto."""
+    toks = _apren_tokens(texto)
+    if not toks:
+        return []
+    scored = []
+    for a in _apren_cargar():
+        blob = "%s %s" % (a.get("tema", ""), a.get("dato", ""))
+        n = len(toks & _apren_tokens(blob))
+        if n:
+            scored.append((n, a))
+    scored.sort(key=lambda x: -x[0])
+    return [a for _, a in scored[:top]]
+
+
+def _apren_agregar(tema: str, dato: str, autor: str) -> int:
+    items = _apren_cargar()
+    nid = max([a.get("id", 0) for a in items] + [0]) + 1
+    items.append({"id": nid, "tema": tema, "dato": dato,
+                  "autor": autor, "ts": time.time()})
+    _apren_guardar(items)
+    return nid
+
+
+def _apren_borrar(nid: int):
+    items = _apren_cargar()
+    resto = [a for a in items if a.get("id") != nid]
+    if len(resto) == len(items):
+        return None
+    _apren_guardar(resto)
+    return True
+
+
 ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
 
 
@@ -543,17 +606,60 @@ def _procesar(item: dict) -> str:
         r = cmd_resolver(p[1], "rechazada") if len(p) > 1 else "Uso: /rechazar <id>"
     elif texto.startswith("/estado"):
         r = cmd_estado()
+    elif texto.startswith("/aprendizajes"):
+        items = _apren_cargar()
+        if not items:
+            r = "📚 Aún no me han enseñado nada. Usa /aprender tema | dato."
+        else:
+            r = "📚 Lo que me han enseñado:\n" + "\n".join(
+                "#%d %s (por %s)" % (a.get("id"), a.get("tema"), a.get("autor", "?"))
+                for a in items)
+    elif texto.startswith("/aprender"):
+        if not es_comandante:
+            r = "🚫 Solo el Comandante (o Dev) me enseña. Tu rol: %s." % rol
+        else:
+            resto = texto[len("/aprender"):].strip()
+            if "|" not in resto:
+                r = "Uso: /aprender tema | dato que debo recordar"
+            else:
+                tema, dato = (x.strip() for x in resto.split("|", 1))
+                if not tema or not dato:
+                    r = "Uso: /aprender tema | dato que debo recordar"
+                else:
+                    nid = _apren_agregar(tema[:80], dato[:1500], nombre)
+                    print("[CEO-BOT] aprendizaje #%d '%s' por %s"
+                          % (nid, tema[:60], chat), flush=True)
+                    r = "🧠 Anotado #%d (%s). Lo usaré como contexto en tus órdenes." % (nid, tema)
+    elif texto.startswith("/olvidar"):
+        if not es_comandante:
+            r = "🚫 Solo el Comandante (o Dev) borra memoria. Tu rol: %s." % rol
+        else:
+            p = texto.split()
+            if len(p) < 2 or not p[1].lstrip("#").isdigit():
+                r = "Uso: /olvidar <id>  (ver ids con /aprendizajes)"
+            elif _apren_borrar(int(p[1].lstrip("#"))):
+                r = "🗑️ Olvidé el #%s." % p[1].lstrip("#")
+            else:
+                r = "No existe aprendizaje #%s." % p[1].lstrip("#")
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
         r = ("Soy el control del Orquestador. Eres %s · rol: %s.\n"
-             "Comandos: /estado /cola /gates /quiensoy%s%s"
-             % (nombre, rol, " /aprobar <id> /rechazar <id> + órdenes en texto" if es_comandante
+             "Comandos: /estado /cola /gates /quiensoy /aprendizajes%s%s"
+             % (nombre, rol,
+                " /aprobar <id> /rechazar <id> + órdenes en texto /aprender tema | dato /olvidar <id>" if es_comandante
                 else " (solo lectura)",
                 " | admin: /solicitudes /autorizar <id> [rol] /rechazar <id>" if es_admin else ""))
     else:
         ctx = _historial(chat)
         # Identidad inyectada: el cerebro sabe QUIEN habla y con QUE rol,
         # asi "sabes quien soy?" se responde con datos, no con memoria generica.
-        firmado = "[Soy %s, rol %s] %s" % (nombre, rol, texto)
+        # Memoria enseñada: aprendizajes relevantes viajan como contexto.
+        rel = _apren_relevantes(texto)
+        memoria = ""
+        if rel:
+            memoria = "\n[Lo que me enseñaron: " + " | ".join(
+                "#%d %s: %s" % (a.get("id"), a.get("tema"), a.get("dato"))
+                for a in rel) + "]"
+        firmado = "[Soy %s, rol %s] %s%s" % (nombre, rol, texto, memoria)
         if PUENTE_MODO == "openbot":
             # F4b: texto crudo al thread de OpenBot — el historial/plan y la
             # confirmación ya viven en la memoria del thread de OpenBot.

@@ -1,4 +1,4 @@
-# openbot_guardia.ps1 — vigilante del API OpenBot (buns server/worker de Windows).
+# openbot_guardia.ps1 - vigilante del API OpenBot (buns server/worker de Windows).
 # Corre como tarea S4U (yazminlap\agente). Cada 5 min:
 #   1. GET 127.0.0.1:3001/api/me; si falla -> schtasks /run OpenBot-Server + OpenBot-Worker
 #   2. Espera 60s y re-verifica; avisa por Telegram solo en transiciones.
@@ -53,10 +53,10 @@ while ($true) {
   $vivo = Api-Viva
   if ($vivo -and -not $vivoPrevio) {
     $hora = Get-Date -Format 'HH:mm'
-    Avisa-Telegram ("✅ API OpenBot operativa de nuevo ($hora) — cerebro del bot en linea.")
+    Avisa-Telegram ("[OK] API OpenBot operativa de nuevo ($hora) - cerebro del bot en linea.")
   }
   if (-not $vivo -and $vivoPrevio) {
-    Avisa-Telegram ("⚠️ API OpenBot caida — intentando relanzar buns automaticamente. Te aviso cuando vuelva.")
+    Avisa-Telegram ("[!] API OpenBot caida - intentando relanzar buns automaticamente. Te aviso cuando vuelva.")
   }
   $vivoPrevio = $vivo
   Start-Sleep -Seconds 300

@@ -1,4 +1,4 @@
-# respaldo_openbot.ps1 — respaldo diario del arbol yazminlap (tarea 03:00 S4U agente).
+# respaldo_openbot.ps1 - respaldo diario del arbol yazminlap (tarea 03:00 S4U agente).
 # 1. pg_dump de postgres (contenedor) -> \\wsl$\colmena -> destino con fecha
 # 2. copia de la memoria local del puente (cola/*.jsonl, acceso.json, aprendizajes.json, offset)
 # 3. rotacion: conserva ultimos 7 de cada tipo. Avisa por Telegram solo si falla.
@@ -59,7 +59,7 @@ foreach ($pat in @('openbot-db-*.sql', 'cola-*-pendientes.jsonl', 'cola-*-hechos
 
 if ($fallos.Count -gt 0) {
   Log ('RESPALDO CON FALLOS: ' + ($fallos -join '; '))
-  Avisa-Telegram ("⚠️ Respaldo nocturno con fallos ($Fecha): " + ($fallos -join '; '))
+  Avisa-Telegram ("[!] Respaldo nocturno con fallos ($Fecha): " + ($fallos -join '; '))
 } else {
   Log 'respaldo OK completo'
 }

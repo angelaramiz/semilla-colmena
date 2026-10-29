@@ -238,6 +238,162 @@ def _apren_borrar(nid: int):
     return True
 
 
+REC_ARCH = os.path.join(COLA, "recordatorios.json")  # DB local de recordatorios/rutinas
+REC_DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3,
+            "viernes": 4, "sabado": 5, "domingo": 6}
+
+
+def _rec_cargar() -> list:
+    try:
+        with open(REC_ARCH, "r", encoding="utf-8") as f:
+            d = json.load(f)
+            return d if isinstance(d, list) else []
+    except Exception:
+        return []
+
+
+def _rec_guardar(items: list) -> None:
+    try:
+        os.makedirs(COLA, exist_ok=True)
+        with open(REC_ARCH, "w", encoding="utf-8") as f:
+            json.dump(items, f, ensure_ascii=False)
+    except Exception as e:
+        print("[CEO-BOT] no pude guardar recordatorios.json: %s" % str(e)[:120], flush=True)
+
+
+def _rec_norm(s: str) -> str:
+    s = s.lower()
+    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u")):
+        s = s.replace(a, b)
+    return s
+
+
+def _rec_parsear(resto: str):
+    """Lenguaje natural -> (ts_disparo, diaria, texto) o (None, False, mensaje_uso)."""
+    import re as _re
+    import datetime as _dt
+    USO = ("Uso: /recordar en 30 min|2 horas <texto> | manana|hoy HH:MM <texto> | "
+           "lunes..domingo HH:MM <texto> | HH:MM <texto> | diaria HH:MM <texto>")
+    r = _rec_norm(resto.strip())
+    if not r:
+        return None, False, USO
+    ahora = _dt.datetime.now()
+    m = _re.match(r"en\s+(\d+)\s*(min\w*|hora\w*|h)\s+(.+)", r)
+    if m:
+        n, u, texto = int(m.group(1)), m.group(2), m.group(3).strip()
+        if not texto:
+            return None, False, USO
+        delta = _dt.timedelta(minutes=n) if u.startswith("min") else _dt.timedelta(hours=n)
+        return (ahora + delta).timestamp(), False, texto[:500]
+    m = _re.match(r"diaria\s+(\d{1,2}):(\d{2})\s+(.+)", r)
+    if m:
+        h, mi, texto = int(m.group(1)), int(m.group(2)), m.group(3).strip()
+        if not (0 <= h < 24 and 0 <= mi < 60) or not texto:
+            return None, False, USO
+        tiro = ahora.replace(hour=h, minute=mi, second=0, microsecond=0)
+        if tiro <= ahora:
+            tiro += _dt.timedelta(days=1)
+        return tiro.timestamp(), True, texto[:500]
+    m = _re.match(r"(hoy|manana)\s+(\d{1,2}):(\d{2})\s+(.+)", r)
+    if m:
+        dia, h, mi, texto = m.group(1), int(m.group(2)), int(m.group(3)), m.group(4).strip()
+        if not (0 <= h < 24 and 0 <= mi < 60) or not texto:
+            return None, False, USO
+        tiro = ahora.replace(hour=h, minute=mi, second=0, microsecond=0)
+        if dia == "manana":
+            tiro += _dt.timedelta(days=1)
+        elif tiro <= ahora:
+            tiro += _dt.timedelta(days=1)
+        return tiro.timestamp(), False, texto[:500]
+    m = _re.match(r"(lunes|martes|miercoles|jueves|viernes|sabado|domingo)\s+(\d{1,2}):(\d{2})\s+(.+)", r)
+    if m:
+        h, mi, texto = int(m.group(2)), int(m.group(3)), m.group(4).strip()
+        if not (0 <= h < 24 and 0 <= mi < 60) or not texto:
+            return None, False, USO
+        ahead = (REC_DIAS[m.group(1)] - ahora.weekday()) % 7
+        tiro = (ahora + _dt.timedelta(days=ahead)).replace(hour=h, minute=mi, second=0, microsecond=0)
+        if tiro <= ahora:
+            tiro += _dt.timedelta(days=7)
+        return tiro.timestamp(), False, texto[:500]
+    m = _re.match(r"(\d{1,2}):(\d{2})\s+(.+)", r)
+    if m:
+        h, mi, texto = int(m.group(1)), int(m.group(2)), m.group(3).strip()
+        if not (0 <= h < 24 and 0 <= mi < 60) or not texto:
+            return None, False, USO
+        tiro = ahora.replace(hour=h, minute=mi, second=0, microsecond=0)
+        if tiro <= ahora:
+            tiro += _dt.timedelta(days=1)
+        return tiro.timestamp(), False, texto[:500]
+    return None, False, USO
+
+
+def _rec_agregar(chat: str, autor: str, ts: float, texto: str, diaria: bool) -> int:
+    items = _rec_cargar()
+    nid = max([x.get("id", 0) for x in items] + [0]) + 1
+    items.append({"id": nid, "chat": chat, "autor": autor, "texto": texto,
+                  "ts": ts, "diaria": diaria, "estado": "pendiente",
+                  "creado": time.time()})
+    _rec_guardar(items)
+    return nid
+
+
+def _rec_borrar(nid: int, chat: str, es_admin: bool):
+    items = _rec_cargar()
+    for x in items:
+        if x.get("id") == nid and x.get("estado") == "pendiente":
+            if str(x.get("chat")) != str(chat) and not es_admin:
+                return "ajeno"
+            x["estado"] = "cancelado"
+            _rec_guardar(items)
+            return "ok"
+    return None
+
+
+def _rec_listar(chat: str, es_admin: bool) -> str:
+    import datetime as _dt
+    items = [x for x in _rec_cargar() if x.get("estado") == "pendiente"]
+    if not es_admin:
+        items = [x for x in items if str(x.get("chat")) == str(chat)]
+    if not items:
+        return "Sin recordatorios pendientes."
+    items.sort(key=lambda x: x.get("ts", 0))
+    lineas = []
+    for x in items:
+        cuando = _dt.datetime.fromtimestamp(x["ts"]).strftime("%d %H:%M")
+        quien = "" if str(x.get("chat")) == str(chat) else " (%s)" % x.get("autor", "?")
+        rep = " [diaria]" if x.get("diaria") else ""
+        lineas.append("#%d %s%s: %s%s" % (x["id"], cuando, rep, x.get("texto", "")[:80], quien))
+    return "Recordatorios:\n" + "\n".join(lineas)
+
+
+def _recordatorios_loop():
+    """Hilo de entrega: cada 30s dispara los vencidos (diaria se reprograma +24h)."""
+    while True:
+        try:
+            items = _rec_cargar()
+            ahora = time.time()
+            cambio = False
+            for x in items:
+                if x.get("estado") == "pendiente" and x.get("ts", 0) <= ahora:
+                    try:
+                        enviar(str(x["chat"]), "Recordatorio: %s" % x.get("texto", ""))
+                    except Exception as e:
+                        print("[CEO-BOT] no pude entregar rec #%d: %s"
+                              % (x.get("id"), str(e)[:120]), flush=True)
+                        continue
+                    if x.get("diaria"):
+                        x["ts"] = x["ts"] + 86400
+                    else:
+                        x["estado"] = "hecho"
+                    cambio = True
+                    print("[CEO-BOT] recordatorio #%d entregado" % x.get("id"), flush=True)
+            if cambio:
+                _rec_guardar(items)
+        except Exception as e:
+            print("[CEO-BOT] loop recordatorios: %s" % str(e)[:150], flush=True)
+        time.sleep(30)
+
+
 ACCESO_TOTAL = ("comandante", "ceo", "dev")  # dev = conservante con planta completa
 
 
@@ -630,6 +786,18 @@ def _procesar(item: dict) -> str:
                     print("[CEO-BOT] aprendizaje #%d '%s' por %s"
                           % (nid, tema[:60], chat), flush=True)
                     r = "🧠 Anotado #%d (%s). Lo usaré como contexto en tus órdenes." % (nid, tema)
+    elif texto.startswith("/olvidar_rec"):
+        p = texto.split()
+        if len(p) < 2 or not p[1].lstrip("#").isdigit():
+            r = "Uso: /olvidar_rec <id>  (ver ids con /recordatorios)"
+        else:
+            bor = _rec_borrar(int(p[1].lstrip("#")), chat, es_admin)
+            if bor == "ok":
+                r = "🗑️ Recordatorio #%s cancelado." % p[1].lstrip("#")
+            elif bor == "ajeno":
+                r = "Ese recordatorio no es tuyo; pide a un admin que lo cancele."
+            else:
+                r = "No existe recordatorio #%s pendiente." % p[1].lstrip("#")
     elif texto.startswith("/olvidar"):
         if not es_comandante:
             r = "🚫 Solo el Comandante (o Dev) borra memoria. Tu rol: %s." % rol
@@ -641,11 +809,27 @@ def _procesar(item: dict) -> str:
                 r = "🗑️ Olvidé el #%s." % p[1].lstrip("#")
             else:
                 r = "No existe aprendizaje #%s." % p[1].lstrip("#")
+    elif texto.startswith("/recordatorios"):
+        r = _rec_listar(chat, es_admin)
+    elif texto.startswith("/recordar"):
+        if not es_comandante:
+            r = "🚫 Solo el Comandante (o Dev) programa recordatorios. Tu rol: %s." % rol
+        else:
+            ts, diaria, res = _rec_parsear(texto[len("/recordar"):])
+            if ts is None:
+                r = res
+            else:
+                import datetime as _dt
+                nid = _rec_agregar(chat, nombre, ts, res, diaria)
+                cuando = _dt.datetime.fromtimestamp(ts).strftime("%d %H:%M")
+                print("[CEO-BOT] recordatorio #%d para %s (%s)" % (nid, chat, cuando), flush=True)
+                r = "⏰ Anotado #%d para el %s%s: %s" % (
+                    nid, cuando, " (diaria)" if diaria else "", res[:120])
     elif texto.startswith("/start") or texto.startswith("/ayuda"):
         r = ("Soy el control del Orquestador. Eres %s · rol: %s.\n"
-             "Comandos: /estado /cola /gates /quiensoy /aprendizajes%s%s"
+             "Comandos: /estado /cola /gates /quiensoy /aprendizajes /recordatorios%s%s"
              % (nombre, rol,
-                " /aprobar <id> /rechazar <id> + órdenes en texto /aprender tema | dato /olvidar <id>" if es_comandante
+                " /aprobar <id> /rechazar <id> + órdenes en texto /aprender tema | dato /olvidar <id> /recordar ... /olvidar_rec <id>" if es_comandante
                 else " (solo lectura)",
                 " | admin: /solicitudes /autorizar <id> [rol] /rechazar <id>" if es_admin else ""))
     else:
@@ -741,6 +925,8 @@ def main():
     offset = _offset_cargar()
     for _ in range(N_WORKERS):
         threading.Thread(target=_trabajador, daemon=True).start()
+    threading.Thread(target=_recordatorios_loop, daemon=True).start()
+    print("[CEO-BOT] hilo de recordatorios activo (cada 30s)", flush=True)
     print("[CEO-BOT] escuchando como control del Orquestador…", flush=True)
     print("[CEO-BOT] cola persistente activa: offset=%d pendientes=%d hechos=%d"
           % (offset, len(_items_leer()), len(hechos)), flush=True)

@@ -92,7 +92,7 @@ ROLES_AUTORIZABLES = ("conservante", "comandante")  # dev/ceo solo por registry 
 
 def _acceso_cargar() -> dict:
     try:
-        with open(ACCESO_ARCH, "r", encoding="utf-8") as f:
+        with open(ACCESO_ARCH, "r", encoding="utf-8-sig") as f:
             d = json.load(f)
             if isinstance(d, dict):
                 d.setdefault("usuarios", {})
@@ -184,7 +184,7 @@ APREN_STOP = frozenset(
 
 def _apren_cargar() -> list:
     try:
-        with open(APREN_ARCH, "r", encoding="utf-8") as f:
+        with open(APREN_ARCH, "r", encoding="utf-8-sig") as f:
             d = json.load(f)
             return d if isinstance(d, list) else []
     except Exception:
@@ -245,7 +245,7 @@ REC_DIAS = {"lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3,
 
 def _rec_cargar() -> list:
     try:
-        with open(REC_ARCH, "r", encoding="utf-8") as f:
+        with open(REC_ARCH, "r", encoding="utf-8-sig") as f:
             d = json.load(f)
             return d if isinstance(d, list) else []
     except Exception:

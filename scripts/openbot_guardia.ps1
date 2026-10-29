@@ -40,7 +40,7 @@ function Avisa-Telegram([string]$Texto) {
 
 Log 'guardia openbot arranque (api/me cada 5 min)'
 $vivoPrevio = Api-Viva
-Log ('estado inicial api: ' + $(if ($vivoPrevio) { 'VIVA' } else { 'CAIDA' }))
+if ($vivoPrevio) { Log 'estado inicial api: VIVA' } else { Log 'estado inicial api: CAIDA' }
 while ($true) {
   if (-not (Api-Viva)) {
     Log 'API caida -> relanzando OpenBot-Server + OpenBot-Worker'
